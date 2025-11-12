@@ -97,13 +97,45 @@ fn main() {
                 }
             }
 
-            let category = parts[4..channel_idx].join(" ");
+            let mut category = parts[4..channel_idx].join(" ");
             let amount = parts[amount_idx].to_string();
-            let description = if amount_idx + 2 < parts.len() {
+            let mut description = if amount_idx + 2 < parts.len() {
                 parts[amount_idx + 2..].join(" ")
             } else {
                 String::new()
             };
+
+            match description.as_str() {
+                s if s.starts_with("True Money") => {
+                    category = "Перевод".to_string();
+                }
+                s if s.starts_with("VILLA MARKET") => {
+                    category = "Еда".to_string();
+                    description = "Еда (магазин)".to_string();
+                }
+                s if s.to_lowercase().contains("cafe") => {
+                    category = "Еда".to_string();
+                    description = "Еда (кафе)".to_string();
+                }
+                s if s.starts_with("Metropolitan Electricity") => {
+                    category = "Коммунальные платежи".to_string();
+                    description = "Электричество".to_string();
+                }
+                s if s.starts_with("นิติบุคคลอาคารชุด") => {
+                    category = "Коммунальные платежи".to_string();
+                    description = "Вода".to_string();
+                }
+                s if s.starts_with("AIS Postpaid/AIS Fibre") => {
+                    category = "Интернет".to_string();
+                    description = "Интернет".to_string();
+                }
+                s if s.contains("น.ส. ชญานิน โกว") && amount == "-30,000.00" =>
+                {
+                    category = "Аренда".to_string();
+                    description = "Оплата квартиры".to_string();
+                }
+                _ => {}
+            }
 
             result.push(Transaction {
                 date_time,
@@ -114,7 +146,6 @@ fn main() {
         }
     }
 
-    // TODO apply renaming rules
     // TODO add headers, save as csv with ';' delimiter
 
     for line in result {
