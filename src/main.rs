@@ -1,3 +1,4 @@
+use csv::WriterBuilder;
 use regex::Regex;
 use std::io;
 
@@ -146,12 +147,23 @@ fn main() {
         }
     }
 
-    // TODO add headers, save as csv with ';' delimiter
+    println!("Saving parsed data to csv...");
 
-    for line in result {
-        println!(
-            "Time: {}, Tran: {}, Amount: {}, Det: {}",
-            line.date_time, line.category, line.amount, line.description
-        );
-    }
+    match WriterBuilder::new().delimiter(b';').from_path("TTB.csv") {
+        Ok(mut csv_writer) => {
+            csv_writer
+                .write_record(["Date Time", "Category", "Amount", "Description"])
+                .unwrap();
+
+            for line in result {
+                csv_writer
+                    .write_record([line.date_time, line.category, line.amount, line.description])
+                    .unwrap();
+            }
+            csv_writer.flush().unwrap();
+
+            println!("Parsing done");
+        }
+        Err(err) => panic!("Could not write csv file: {}", err),
+    };
 }
