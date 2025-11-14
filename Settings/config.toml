@@ -1,3 +1,4 @@
-parse_folder = ""
+input_folder = "Parse"
+output_folder = "Output"
 ttb_channels = []
 rules = []
