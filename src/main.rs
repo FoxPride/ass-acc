@@ -30,24 +30,26 @@ pub struct Transaction {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cfg: AppConfig = confy::load_path("Settings/config.toml")?;
+    let config_path = "Settings/config.toml";
+    let mut cfg: AppConfig = confy::load_path(config_path)?;
 
-    println!("Parsing PDF file...");
-    let mut file = PathBuf::from(cfg.parse_folder);
+    println!("Начинаю обработку транзакций TTB-банка...");
+
+    let mut file = PathBuf::from(&cfg.parse_folder);
     file.push("1.pdf");
 
     let bytes = std::fs::read(file.as_path())
-        .unwrap_or_else(|err| panic!("Could not open file: {:?}\n Err: {}", file, err));
+        .unwrap_or_else(|err| panic!("  Не могу открыть файл: {:?}\n Err: {}", file, err));
     let parsed = pdf_extract::extract_text_from_mem(&bytes)
-        .unwrap_or_else(|err| panic!("Could not parse file: {:?}\n Err: {}", file, err));
+        .unwrap_or_else(|err| panic!("  Не могу обработать файл: {:?}\n Err: {}", file, err));
 
     let mut result: Vec<Transaction> = vec![];
     let date_rg = Regex::new(r"^\d{1,2}\s+\w{3}\s+\d{2}\s+\d{2}:\d{2}").unwrap();
     let amount_rg = Regex::new(r"\d{1}\.\d{2}").unwrap();
-    let mut channels = Vec::from(cfg.ttb_channels);
 
     let mut continue_parse = false;
     let mut buffer = String::new();
+    let mut update_config = false;
 
     for line in parsed.lines() {
         let is_transaction = date_rg.is_match_at(line, 0);
@@ -73,34 +75,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut channel_idx = 0;
             for (i, part) in parts[5..].iter().enumerate() {
-                if channels.iter().any(|ch| part.starts_with(ch)) {
+                if cfg.ttb_channels.iter().any(|ch| part.starts_with(ch)) {
                     channel_idx = 5 + i;
                     break;
                 }
             }
 
             if channel_idx == 0 {
-                println!("Не найден канал на строке: {}", to_parse);
-                println!("Известные каналы: {:?}", channels);
-                println!("Введите новый канал: ");
+                println!("  Не найден канал на строке: {}", to_parse);
+                println!("  Известные каналы: {:?}", &cfg.ttb_channels);
+                println!("  Введите новый канал: ");
 
                 let mut new_channel = String::new();
                 io::stdin().read_line(&mut new_channel).unwrap();
                 let new_channel = new_channel.trim().to_string();
 
                 if !new_channel.is_empty() {
-                    channels.push(new_channel);
+                    cfg.ttb_channels.push(new_channel);
+                    update_config = true;
                 }
 
                 for (i, part) in parts[5..].iter().enumerate() {
-                    if channels.iter().any(|ch| part.starts_with(ch)) {
+                    if cfg.ttb_channels.iter().any(|ch| part.starts_with(ch)) {
                         channel_idx = 5 + i;
                         break;
                     }
                 }
 
                 if channel_idx == 0 {
-                    println!("Не могу найти индекс канала");
+                    println!("  Не могу найти индекс канала");
                     continue;
                 }
             }
@@ -149,24 +152,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("Saving parsed data to csv...");
+    if update_config {
+        confy::store_path(config_path, cfg)?;
+        println!("  Конфиг успешно сохранён");
+    }
 
-    match WriterBuilder::new().delimiter(b';').from_path("TTB.csv") {
-        Ok(mut csv_writer) => {
-            csv_writer
-                .write_record(["Date Time", "Category", "Amount", "Description"])
-                .unwrap();
+    let mut csv_writer = WriterBuilder::new()
+        .delimiter(b';')
+        .from_path("TTB.csv")
+        .unwrap_or_else(|err| panic!("  Не могу записать csv-файл:  {}", err));
+    csv_writer
+        .write_record(["Date Time", "Category", "Amount", "Description"])
+        .unwrap();
 
-            for line in result {
-                csv_writer
-                    .write_record([line.date_time, line.category, line.amount, line.description])
-                    .unwrap();
-            }
-            csv_writer.flush().unwrap();
+    for line in result {
+        csv_writer
+            .write_record([line.date_time, line.category, line.amount, line.description])
+            .unwrap();
+    }
+    csv_writer.flush().unwrap();
 
-            println!("Parsing done");
-        }
-        Err(err) => panic!("Could not write csv file: {}", err),
-    };
+    println!("Обработка транзакций TTB-банка успешно закончена");
+
     Ok(())
 }
