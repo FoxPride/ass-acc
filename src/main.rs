@@ -1,6 +1,26 @@
 use csv::WriterBuilder;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::io;
+use std::path::PathBuf;
+
+#[derive(Default, Serialize, Deserialize)]
+struct AppConfig {
+    parse_folder: String,
+    ttb_channels: Vec<String>,
+    rules: Vec<RenameRule>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RenameRule {
+    #[serde(with = "serde_regex")]
+    regex: Regex,
+    category: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    amount: Option<String>,
+}
 
 pub struct Transaction {
     pub date_time: String,
@@ -9,26 +29,22 @@ pub struct Transaction {
     pub description: String,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cfg: AppConfig = confy::load_path("Settings/config.toml")?;
+
     println!("Parsing PDF file...");
-    let bytes = match std::fs::read("Parsing/1 Original.pdf") {
-        Ok(bytes) => bytes,
-        Err(err) => panic!("Could not open file: {}", err),
-    };
-    let parsed = match pdf_extract::extract_text_from_mem(&bytes) {
-        Ok(text) => text,
-        Err(err) => panic!("Could not parse file: {}", err),
-    };
+    let mut file = PathBuf::from(cfg.parse_folder);
+    file.push("1.pdf");
+
+    let bytes = std::fs::read(file.as_path())
+        .unwrap_or_else(|err| panic!("Could not open file: {:?}\n Err: {}", file, err));
+    let parsed = pdf_extract::extract_text_from_mem(&bytes)
+        .unwrap_or_else(|err| panic!("Could not parse file: {:?}\n Err: {}", file, err));
 
     let mut result: Vec<Transaction> = vec![];
     let date_rg = Regex::new(r"^\d{1,2}\s+\w{3}\s+\d{2}\s+\d{2}:\d{2}").unwrap();
     let amount_rg = Regex::new(r"\d{1}\.\d{2}").unwrap();
-    let mut channels: Vec<String> = vec![
-        "Mobile".to_string(),
-        "EDC".to_string(),
-        "Foreign".to_string(),
-        "Auto".to_string(),
-    ];
+    let mut channels = Vec::from(cfg.ttb_channels);
 
     let mut continue_parse = false;
     let mut buffer = String::new();
@@ -106,36 +122,22 @@ fn main() {
                 String::new()
             };
 
-            match description.as_str() {
-                s if s.starts_with("True Money") => {
-                    category = "Перевод".to_string();
+            for rule in &cfg.rules {
+                if !rule.regex.is_match(&description) {
+                    continue;
                 }
-                s if s.starts_with("VILLA MARKET") => {
-                    category = "Еда".to_string();
-                    description = "Еда (магазин)".to_string();
-                }
-                s if s.to_lowercase().contains("cafe") => {
-                    category = "Еда".to_string();
-                    description = "Еда (кафе)".to_string();
-                }
-                s if s.starts_with("Metropolitan Electricity") => {
-                    category = "Коммунальные платежи".to_string();
-                    description = "Электричество".to_string();
-                }
-                s if s.starts_with("นิติบุคคลอาคารชุด") => {
-                    category = "Коммунальные платежи".to_string();
-                    description = "Вода".to_string();
-                }
-                s if s.starts_with("AIS Postpaid/AIS Fibre") => {
-                    category = "Интернет".to_string();
-                    description = "Интернет".to_string();
-                }
-                s if s.contains("น.ส. ชญานิน โกว") && amount == "-30,000.00" =>
+
+                if let Some(required_amount) = &rule.amount
+                    && required_amount != &amount
                 {
-                    category = "Аренда".to_string();
-                    description = "Оплата квартиры".to_string();
+                    continue;
                 }
-                _ => {}
+
+                category = rule.category.clone();
+                if let Some(desc) = &rule.description {
+                    description = desc.clone();
+                }
+                break;
             }
 
             result.push(Transaction {
@@ -166,4 +168,5 @@ fn main() {
         }
         Err(err) => panic!("Could not write csv file: {}", err),
     };
+    Ok(())
 }
