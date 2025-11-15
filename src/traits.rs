@@ -2,24 +2,22 @@ use anyhow::{Context, Result};
 use csv::WriterBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub trait Parser {
-    type Transaction: Transaction;
+    fn get_output(&self) -> &PathBuf;
 
-    fn csv_header(&self) -> Vec<&'static str>;
+    fn transactions(&self) -> &[Transaction];
 
-    fn transactions(&self) -> &[Self::Transaction];
+    fn parse(&mut self, cfg: &mut AppConfig, cfg_path: &str) -> Result<()>;
 
-    fn parse(&mut self, path: PathBuf, cfg: &mut AppConfig, cfg_path: &str) -> Result<()>;
-
-    fn write_csv<P: AsRef<Path> + std::fmt::Display>(&self, path: P) -> Result<()> {
+    fn write_csv(&self) -> Result<()> {
         let mut csv_writer = WriterBuilder::new()
             .delimiter(b';')
-            .from_path(&path)
-            .with_context(|| format!("Ошибка открытия файла: {}", path))?;
+            .from_path(self.get_output())
+            .with_context(|| format!("Ошибка открытия файла: {:?}", self.get_output()))?;
 
-        csv_writer.write_record(self.csv_header())?;
+        csv_writer.write_record(["Category", "Description", "Date Time", "Amount"])?;
 
         for transaction in self.transactions() {
             csv_writer.write_record(transaction.to_csv_row())?;
@@ -29,10 +27,42 @@ pub trait Parser {
     }
 }
 
-pub trait Transaction {
-    fn to_csv_row(&self) -> Vec<&str>;
+pub struct Transaction {
+    pub date_time: String,
+    pub category: String,
+    pub amount: String,
+    pub description: String,
+}
 
-    fn apply_rename_rules(&mut self, rules: &[RenameRule]);
+impl Transaction {
+    fn to_csv_row(&self) -> Vec<&str> {
+        vec![
+            &self.category,
+            &self.description,
+            &self.date_time,
+            &self.amount,
+        ]
+    }
+
+    pub fn apply_rename_rules(&mut self, rules: &[crate::traits::RenameRule]) {
+        for rule in rules {
+            if !rule.regex.is_match(&self.description) {
+                continue;
+            }
+
+            if let Some(required_amount) = &rule.amount
+                && required_amount != &self.amount
+            {
+                continue;
+            }
+
+            self.category = rule.category.clone();
+            if let Some(desc) = &rule.description {
+                self.description = desc.clone();
+            }
+            break;
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]

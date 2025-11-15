@@ -5,73 +5,40 @@ use regex::Regex;
 
 use crate::traits::{AppConfig, Parser, Transaction};
 
-pub struct TTBTransaction {
-    date_time: String,
-    category: String,
-    amount: String,
-    description: String,
-}
-
-impl Transaction for TTBTransaction {
-    fn to_csv_row(&self) -> Vec<&str> {
-        vec![
-            &self.date_time,
-            &self.category,
-            &self.amount,
-            &self.description,
-        ]
-    }
-
-    fn apply_rename_rules(&mut self, rules: &[crate::traits::RenameRule]) {
-        for rule in rules {
-            if !rule.regex.is_match(&self.description) {
-                continue;
-            }
-
-            if let Some(required_amount) = &rule.amount
-                && required_amount != &self.amount
-            {
-                continue;
-            }
-
-            self.category = rule.category.clone();
-            if let Some(desc) = &rule.description {
-                self.description = desc.clone();
-            }
-            break;
-        }
-    }
-}
-
 pub struct TTBParser {
-    pub transactions: Vec<TTBTransaction>,
+    input: PathBuf,
+    output: PathBuf,
+    pub transactions: Vec<Transaction>,
 }
 
 impl TTBParser {
-    pub fn new() -> Self {
+    pub fn new(input: PathBuf, output_folder: &str) -> Self {
+        let mut output = PathBuf::from(output_folder);
+        output.push("TTB.csv");
+
         Self {
+            input,
+            output,
             transactions: Vec::new(),
         }
     }
 }
 
 impl Parser for TTBParser {
-    type Transaction = TTBTransaction;
-
-    fn csv_header(&self) -> Vec<&'static str> {
-        ["Date Time", "Category", "Amount", "Description"].to_vec()
+    fn get_output(&self) -> &PathBuf {
+        &self.output
     }
 
-    fn transactions(&self) -> &[Self::Transaction] {
+    fn transactions(&self) -> &[Transaction] {
         &self.transactions
     }
 
-    fn parse(&mut self, path: PathBuf, cfg: &mut AppConfig, cfg_path: &str) -> anyhow::Result<()> {
-        let bytes = std::fs::read(path.as_path())
-            .with_context(|| format!("Ошибка открытия файла: {:?}", path.as_path()))?;
+    fn parse(&mut self, cfg: &mut AppConfig, cfg_path: &str) -> anyhow::Result<()> {
+        let bytes = std::fs::read(self.input.as_path())
+            .with_context(|| format!("Ошибка открытия файла: {:?}", self.input.as_path()))?;
 
         let parsed = pdf_extract::extract_text_from_mem(&bytes)
-            .with_context(|| format!("Ошибка обработки файла: {:?}", path.as_path()))?;
+            .with_context(|| format!("Ошибка обработки файла: {:?}", self.input.as_path()))?;
 
         let date_rg = Regex::new(r"^\d{1,2}\s+\w{3}\s+\d{2}\s+\d{2}:\d{2}").unwrap();
         let amount_rg = Regex::new(r"\d{1}\.\d{2}").unwrap();
@@ -154,7 +121,7 @@ impl Parser for TTBParser {
                     String::new()
                 };
 
-                let mut transaction = TTBTransaction {
+                let mut transaction = Transaction {
                     date_time,
                     category,
                     amount,
