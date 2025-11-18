@@ -71,6 +71,8 @@ pub struct AppConfig {
     pub output_folder: String,
     pub ttb_channels: Vec<String>,
     pub rules: Vec<RenameRule>,
+    pub access_token: String,
+    pub client_secret: String,
 }
 
 #[derive(Serialize, Deserialize)]
