@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use ass_acc::{
     AppConfig, Parser,
-    parsers::{bybit::BybitParser, ttb::TTBParser},
+    parsers::{bybit::BybitParser, truemoney::TrueMoneyParser, ttb::TTBParser},
 };
 
 #[derive(ClapParser)]
@@ -31,7 +31,7 @@ struct AddArgs {
 enum ParserType {
     Pdf(PathBuf),
     Html(PathBuf),
-    // OCR(PathBuf),
+    Images(PathBuf),
 }
 
 #[tokio::main]
@@ -61,7 +61,9 @@ fn parse_statements(cfg: &mut AppConfig, cfg_path: &str) -> anyhow::Result<()> {
         let mut parser: Box<dyn Parser> = match parser_type {
             ParserType::Pdf(pdf) => Box::new(TTBParser::new(pdf, &cfg.output_folder)),
             ParserType::Html(html) => Box::new(BybitParser::new(html, &cfg.output_folder)),
-            // ParserType::OCR(images_path) => Box::new(OCRParser::new(images_path, &cfg.output_folder)),
+            ParserType::Images(images_folder) => {
+                Box::new(TrueMoneyParser::new(images_folder, &cfg.output_folder))
+            }
         };
 
         let is_parsed = match parser.parse(cfg, cfg_path) {
@@ -105,9 +107,7 @@ fn get_all_parsers(input_folder: &str) -> anyhow::Result<Vec<ParserType>> {
                 }
             }
         } else if path.is_dir() && path.file_name().and_then(|n| n.to_str()) == Some("Images") {
-            continue;
-            // TODO
-            // parsers.push(ParserType::OCR(path));
+            parsers.push(ParserType::Images(path));
         }
     }
 

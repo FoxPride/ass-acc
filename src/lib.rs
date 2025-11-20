@@ -29,6 +29,7 @@ pub trait Parser {
     }
 }
 
+#[derive(Default, Clone)]
 pub struct Transaction {
     pub date_time: String,
     pub category: String,
@@ -71,6 +72,7 @@ impl Transaction {
 pub struct AppConfig {
     pub input_folder: String,
     pub output_folder: String,
+    pub ocr_models: (String, String),
     pub ttb_channels: Vec<String>,
     pub rules: Vec<RenameRule>,
     pub access_token: String,
