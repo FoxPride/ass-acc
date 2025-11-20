@@ -182,15 +182,20 @@ async fn upload_statement(
     statement: PathBuf,
     address: &str,
 ) -> anyhow::Result<()> {
+    let mut json = statement.clone();
+    json.set_extension("json");
+
+    if !json.exists() {
+        println!("Не найден файл конфигурации: {}", json.display());
+        return Ok(());
+    }
+
     let mut headers = header::HeaderMap::new();
     headers.insert("Accept", "application/json".parse().unwrap());
     headers.insert(
         "Authorization",
         format!("Bearer {access_token}").parse().unwrap(),
     );
-
-    let mut json = statement.clone();
-    json.set_extension("json");
 
     let form = multipart::Form::new()
         .file("importable", statement)
