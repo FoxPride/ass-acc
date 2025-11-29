@@ -2,15 +2,10 @@ use clap::{Args, Parser as ClapParser, Subcommand};
 use reqwest::{header, multipart};
 use std::path::PathBuf;
 
-use crate::{
-    bybit::BybitParser,
-    traits::{AppConfig, Parser},
-    ttb::TTBParser,
+use ass_acc::{
+    AppConfig, Parser,
+    parsers::{bybit::BybitParser, ttb::TTBParser},
 };
-
-mod bybit;
-mod traits;
-mod ttb;
 
 #[derive(ClapParser)]
 #[command(version, about, long_about = None)]
@@ -110,7 +105,8 @@ fn get_all_parsers(input_folder: &str) -> anyhow::Result<Vec<ParserType>> {
                 }
             }
         } else if path.is_dir() && path.file_name().and_then(|n| n.to_str()) == Some("Images") {
-            println!("TODO: OCR parser");
+            continue;
+            // TODO
             // parsers.push(ParserType::OCR(path));
         }
     }

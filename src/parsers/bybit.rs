@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use scraper::{Html, Selector};
 
-use crate::traits::{AppConfig, Parser, Transaction};
+use crate::{AppConfig, Parser, Transaction};
 
 pub struct BybitParser {
     input: PathBuf,

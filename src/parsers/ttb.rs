@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use regex::Regex;
 
-use crate::traits::{AppConfig, Parser, Transaction};
+use crate::{AppConfig, Parser, Transaction};
 
 pub struct TTBParser {
     input: PathBuf,

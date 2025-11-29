@@ -4,6 +4,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+pub mod parsers;
+
 pub trait Parser {
     fn get_output(&self) -> &PathBuf;
 
@@ -44,7 +46,7 @@ impl Transaction {
         ]
     }
 
-    pub fn apply_rename_rules(&mut self, rules: &[crate::traits::RenameRule]) {
+    pub fn apply_rename_rules(&mut self, rules: &[RenameRule]) {
         for rule in rules {
             if !rule.regex.is_match(&self.description) {
                 continue;
