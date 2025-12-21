@@ -77,6 +77,15 @@ pub struct AppConfig {
     pub rules: Vec<RenameRule>,
     pub access_token: String,
     pub client_secret: String,
+    pub bybit_selectors: BybitSelectors,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct BybitSelectors {
+    pub merchant: String,
+    pub status: String,
+    pub amount: String,
+    pub datetime: String,
 }
 
 #[derive(Serialize, Deserialize)]

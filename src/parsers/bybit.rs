@@ -39,52 +39,57 @@ impl Parser for BybitParser {
         let document = Html::parse_document(&html_content);
 
         let row_selector = Selector::parse("tbody tr").unwrap();
+        let td_selector = Selector::parse("td").unwrap();
 
-        let merchant_selector = Selector::parse(".bycard__trans-table-merch-name-col").unwrap();
-        let amount_selector = Selector::parse("td:nth-child(2) p").unwrap();
-        let status_selector = Selector::parse("td:nth-child(4) p").unwrap();
-        let datetime_selector = Selector::parse("td:nth-child(5) span").unwrap();
+        let merchant_selector = Selector::parse(&cfg.bybit_selectors.merchant).unwrap();
+        let status_selector = Selector::parse(&cfg.bybit_selectors.status).unwrap();
+        let amount_selector = Selector::parse(&cfg.bybit_selectors.amount).unwrap();
+        let datetime_selector = Selector::parse(&cfg.bybit_selectors.datetime).unwrap();
 
         for row in document.select(&row_selector) {
-            let description = row
-                .select(&merchant_selector)
-                .next()
-                .map(|e| e.text().collect::<String>().trim().to_string())
-                .unwrap_or_default();
+            let cells: Vec<_> = row.select(&td_selector).collect();
 
-            let status = row
-                .select(&status_selector)
-                .next()
-                .map(|e| e.text().collect::<String>().trim().to_string())
-                .unwrap_or_default();
+            if cells.len() >= 6 {
+                let description = cells[0]
+                    .select(&merchant_selector)
+                    .next()
+                    .map(|e| e.text().collect::<String>().trim().to_string())
+                    .unwrap_or_default();
 
-            if description.is_empty() || status != "Successful" {
-                continue;
+                let status = cells[3]
+                    .select(&status_selector)
+                    .next()
+                    .map(|e| e.text().collect::<String>().trim().to_string())
+                    .unwrap_or_else(|| cells[3].text().collect::<String>().trim().to_string());
+
+                if description.is_empty() || status != "Successful" {
+                    continue;
+                }
+
+                let amount = cells[1]
+                    .select(&amount_selector)
+                    .next()
+                    .map(|e| e.text().collect::<String>().trim().to_string())
+                    .unwrap_or_default();
+
+                let date_time = cells[4]
+                    .select(&datetime_selector)
+                    .next()
+                    .map(|e| e.text().collect::<String>().trim().to_string())
+                    .unwrap_or_default();
+
+                let category = "?".to_string();
+
+                let mut transaction = Transaction {
+                    date_time,
+                    category,
+                    amount,
+                    description,
+                };
+                transaction.apply_rename_rules(&cfg.rules);
+
+                self.transactions.push(transaction);
             }
-
-            let amount = row
-                .select(&amount_selector)
-                .next()
-                .map(|e| e.text().collect::<String>().trim().to_string())
-                .unwrap_or_default();
-
-            let date_time = row
-                .select(&datetime_selector)
-                .next()
-                .map(|e| e.text().collect::<String>().trim().to_string())
-                .unwrap_or_default();
-
-            let category = "-".to_string();
-
-            let mut transaction = Transaction {
-                date_time,
-                category,
-                amount,
-                description,
-            };
-            transaction.apply_rename_rules(&cfg.rules);
-
-            self.transactions.push(transaction);
         }
 
         Ok(())
