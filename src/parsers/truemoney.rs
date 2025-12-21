@@ -19,26 +19,8 @@ enum TransactionType {
     Date,
     Time,
     Description,
-    Amount(bool),
+    Amount,
     Search,
-}
-
-struct RegionConfig {
-    bound_offset: u32,
-    transaction_background: u8,
-    date_background: u8,
-    transaction_positive_pixel: u8,
-}
-
-impl Default for RegionConfig {
-    fn default() -> Self {
-        Self {
-            bound_offset: 5,
-            transaction_background: 255,
-            date_background: 240,
-            transaction_positive_pixel: 25,
-        }
-    }
 }
 
 struct RegionSearchMask {
@@ -56,71 +38,71 @@ struct RegionSearchMask {
 }
 
 impl RegionSearchMask {
-    fn new() -> Self {
+    fn new(initial_params: &crate::TrueMoneyRegionSearchParams) -> Self {
         Self {
             search_type: TransactionType::Date,
-            region_x: 50,
+            region_x: initial_params.region_x,
             region_y: 0,
-            region_width: 70,
+            region_width: initial_params.region_width,
             region_height: 0,
-            left_bound_start: 59,
-            right_bound_start: 300,
-            current_region_skip: 20,
-            next_region_skip: 0,
+            left_bound_start: initial_params.left_bound_start,
+            right_bound_start: initial_params.right_bound_start,
+            current_region_skip: initial_params.current_region_skip,
+            next_region_skip: initial_params.next_region_skip,
             region_y_found: false,
-            empty_column_threshold: 25,
+            empty_column_threshold: initial_params.empty_column_threshold,
         }
     }
 
-    fn update_for_next_search(&mut self) {
+    fn update_for_next_search(&mut self, cfg: &crate::TrueMoneyConfig) {
         match self.search_type {
             TransactionType::Date => {
                 self.search_type = TransactionType::Description;
-                self.region_x = 240;
-                self.region_width = 70;
-                self.left_bound_start = 255;
-                self.right_bound_start = 350;
-                self.current_region_skip = 35;
-                self.next_region_skip = 70 + 50;
+                self.region_x = cfg.description_params.region_x;
+                self.region_width = cfg.description_params.region_width;
+                self.left_bound_start = cfg.description_params.left_bound_start;
+                self.right_bound_start = cfg.description_params.right_bound_start;
+                self.current_region_skip = cfg.description_params.current_region_skip;
+                self.next_region_skip = cfg.description_params.next_region_skip;
                 self.region_y_found = false;
-                self.empty_column_threshold = 15;
+                self.empty_column_threshold = cfg.description_params.empty_column_threshold;
             }
             TransactionType::Time => {
                 self.search_type = TransactionType::Search;
-                self.next_region_skip = 100;
+                self.next_region_skip = cfg.search_params.next_region_skip;
             }
             TransactionType::Description => {
-                self.search_type = TransactionType::Amount(false);
-                self.region_x = 1290;
-                self.region_width = 70;
-                self.left_bound_start = 1290;
-                self.right_bound_start = 1365;
-                self.current_region_skip = 35;
-                self.next_region_skip = -50;
+                self.search_type = TransactionType::Amount;
+                self.region_x = cfg.amount_params.region_x;
+                self.region_width = cfg.amount_params.region_width;
+                self.left_bound_start = cfg.amount_params.left_bound_start;
+                self.right_bound_start = cfg.amount_params.right_bound_start;
+                self.current_region_skip = cfg.amount_params.current_region_skip;
+                self.next_region_skip = cfg.amount_params.next_region_skip;
                 self.region_y_found = false;
-                self.empty_column_threshold = 5;
+                self.empty_column_threshold = cfg.amount_params.empty_column_threshold;
             }
-            TransactionType::Amount(_) => {
+            TransactionType::Amount => {
                 self.search_type = TransactionType::Time;
-                self.region_x = 307;
-                self.region_width = 115;
-                self.left_bound_start = 325;
-                self.right_bound_start = 402;
-                self.current_region_skip = 25;
-                self.next_region_skip = 35;
+                self.region_x = cfg.time_params.region_x;
+                self.region_width = cfg.time_params.region_width;
+                self.left_bound_start = cfg.time_params.left_bound_start;
+                self.right_bound_start = cfg.time_params.right_bound_start;
+                self.current_region_skip = cfg.time_params.current_region_skip;
+                self.next_region_skip = cfg.time_params.next_region_skip;
                 self.region_y_found = false;
-                self.empty_column_threshold = 5;
+                self.empty_column_threshold = cfg.time_params.empty_column_threshold;
             }
             TransactionType::Search => {
                 self.search_type = TransactionType::Date;
-                self.region_x = 50;
-                self.region_width = 70;
-                self.left_bound_start = 59;
-                self.right_bound_start = 300;
-                self.current_region_skip = 20;
-                self.next_region_skip = 0;
+                self.region_x = cfg.date_params.region_x;
+                self.region_width = cfg.date_params.region_width;
+                self.left_bound_start = cfg.date_params.left_bound_start;
+                self.right_bound_start = cfg.date_params.right_bound_start;
+                self.current_region_skip = cfg.date_params.current_region_skip;
+                self.next_region_skip = cfg.date_params.next_region_skip;
                 self.region_y_found = false;
-                self.empty_column_threshold = 25;
+                self.empty_column_threshold = cfg.date_params.empty_column_threshold;
             }
         }
     }
@@ -181,7 +163,7 @@ impl Parser for TrueMoneyParser {
             {
                 let img = image::open(path)?;
 
-                let regions = find_regions(&img);
+                let regions = find_regions(&img, &cfg.truemoney_config);
 
                 // buffers for parsing
                 let mut transaction = Transaction::default();
@@ -222,11 +204,10 @@ impl Parser for TrueMoneyParser {
                             self.transactions.push(transaction.clone());
                         }
                         TransactionType::Description => transaction.description = text,
-                        TransactionType::Amount(is_positive) => {
-                            let sign = if is_positive { "+" } else { "-" };
+                        TransactionType::Amount => {
                             if let Some(caps) = amount_rg.captures(&text) {
                                 let amount = &caps[1];
-                                transaction.amount = format!("{sign}{amount}");
+                                transaction.amount = format!("-{amount}");
                             } else {
                                 transaction.amount = "??".to_string();
                                 println!("Warning! Invalid amount format {text}");
@@ -242,15 +223,17 @@ impl Parser for TrueMoneyParser {
     }
 }
 
-fn find_regions(img: &DynamicImage) -> Vec<(TransactionType, ImageRegion)> {
-    let config = RegionConfig::default();
-    let mut state = RegionSearchMask::new();
+fn find_regions(
+    img: &DynamicImage,
+    cfg: &crate::TrueMoneyConfig,
+) -> Vec<(TransactionType, ImageRegion)> {
+    let mut state = RegionSearchMask::new(&cfg.date_params);
     let mut regions = Vec::new();
 
     let mut y = 0u32;
 
     while y < img.height() {
-        let (colored_pixels, should_skip) = set_top_bound(img, y, &mut state, &config);
+        let (colored_pixels, should_skip) = set_top_bound(img, y, &mut state, &cfg.region_config);
 
         if should_skip {
             y += state.current_region_skip;
@@ -259,10 +242,10 @@ fn find_regions(img: &DynamicImage) -> Vec<(TransactionType, ImageRegion)> {
 
         if state.region_y_found && colored_pixels == 0 {
             // bottom bound
-            state.region_height = y - state.region_y + config.bound_offset;
+            state.region_height = y - state.region_y + cfg.region_config.bound_offset;
 
-            set_left_bound(img, &mut state, &config);
-            set_right_bound(img, &mut state, &config);
+            set_left_bound(img, &mut state, &cfg.region_config);
+            set_right_bound(img, &mut state, &cfg.region_config);
 
             regions.push((
                 state.search_type.clone(),
@@ -274,7 +257,7 @@ fn find_regions(img: &DynamicImage) -> Vec<(TransactionType, ImageRegion)> {
                 },
             ));
 
-            state.update_for_next_search();
+            state.update_for_next_search(cfg);
 
             y = y.saturating_add_signed(state.next_region_skip);
 
@@ -283,11 +266,11 @@ fn find_regions(img: &DynamicImage) -> Vec<(TransactionType, ImageRegion)> {
             }
 
             if state.search_type == TransactionType::Search {
-                if img.get_pixel(state.region_x, y)[0] == config.transaction_background {
+                if img.get_pixel(state.region_x, y)[0] == cfg.region_config.transaction_background {
                     state.search_type = TransactionType::Date;
                 }
 
-                state.update_for_next_search();
+                state.update_for_next_search(cfg);
             }
         }
 
@@ -301,7 +284,7 @@ fn set_top_bound(
     img: &DynamicImage,
     y: u32,
     state: &mut RegionSearchMask,
-    config: &RegionConfig,
+    config: &crate::TrueMoneyRegionConfig,
 ) -> (u32, bool) {
     let mut colored_pixels = 0u32;
 
@@ -319,20 +302,17 @@ fn set_top_bound(
             } else {
                 colored_pixels += 1;
             }
-
-            // Handle amount sign detection
-            if matches!(state.search_type, TransactionType::Amount(false))
-                && pixel == config.transaction_positive_pixel
-            {
-                state.search_type = TransactionType::Amount(true);
-            }
         }
     }
 
     (colored_pixels, false)
 }
 
-fn set_left_bound(img: &DynamicImage, state: &mut RegionSearchMask, config: &RegionConfig) {
+fn set_left_bound(
+    img: &DynamicImage,
+    state: &mut RegionSearchMask,
+    config: &crate::TrueMoneyRegionConfig,
+) {
     let mut empty_columns = 0u32;
 
     for x in (0..=state.left_bound_start).rev() {
@@ -352,7 +332,11 @@ fn set_left_bound(img: &DynamicImage, state: &mut RegionSearchMask, config: &Reg
     }
 }
 
-fn set_right_bound(img: &DynamicImage, state: &mut RegionSearchMask, config: &RegionConfig) {
+fn set_right_bound(
+    img: &DynamicImage,
+    state: &mut RegionSearchMask,
+    config: &crate::TrueMoneyRegionConfig,
+) {
     let mut empty_columns = 0u32;
 
     for x in state.right_bound_start..img.width() {
@@ -378,7 +362,7 @@ fn count_colored_pixels_in_column(
     x: u32,
     start_y: u32,
     height: u32,
-    config: &RegionConfig,
+    config: &crate::TrueMoneyRegionConfig,
 ) -> u32 {
     (start_y..(start_y + height))
         .filter(|&y| {

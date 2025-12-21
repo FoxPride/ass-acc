@@ -78,6 +78,7 @@ pub struct AppConfig {
     pub access_token: String,
     pub client_secret: String,
     pub bybit_selectors: BybitSelectors,
+    pub truemoney_config: TrueMoneyConfig,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -86,6 +87,34 @@ pub struct BybitSelectors {
     pub status: String,
     pub amount: String,
     pub datetime: String,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct TrueMoneyConfig {
+    pub region_config: TrueMoneyRegionConfig,
+    pub date_params: TrueMoneyRegionSearchParams,
+    pub description_params: TrueMoneyRegionSearchParams,
+    pub amount_params: TrueMoneyRegionSearchParams,
+    pub time_params: TrueMoneyRegionSearchParams,
+    pub search_params: TrueMoneyRegionSearchParams,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct TrueMoneyRegionConfig {
+    pub bound_offset: u32,
+    pub transaction_background: u8,
+    pub date_background: u8,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct TrueMoneyRegionSearchParams {
+    pub region_x: u32,
+    pub region_width: u32,
+    pub left_bound_start: u32,
+    pub right_bound_start: u32,
+    pub current_region_skip: u32,
+    pub next_region_skip: i32,
+    pub empty_column_threshold: u32,
 }
 
 #[derive(Serialize, Deserialize)]
