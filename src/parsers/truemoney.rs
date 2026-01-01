@@ -190,7 +190,7 @@ impl Parser for TrueMoneyParser {
                             }
                         }
                         TransactionType::Time => {
-                            if let Some(caps) = time_rg.captures(&text) {
+                            if let Some(caps) = time_rg.captures(text.trim()) {
                                 let hours = &caps[1];
                                 let minutes = &caps[2];
 
