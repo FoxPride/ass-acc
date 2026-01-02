@@ -1,3 +1,4 @@
+use chrono::Local;
 use clap::{Args, Parser as ClapParser, Subcommand};
 use reqwest::{header, multipart};
 use std::path::PathBuf;
@@ -75,19 +76,27 @@ fn parse_statements(cfg: &mut AppConfig, cfg_path: &str) -> anyhow::Result<()> {
         };
 
         if is_parsed {
-            match parser.write_csv() {
-                Ok(()) => println!(
-                    "Обработка транзакций успешно закончена: {:?}",
-                    parser.get_output()
-                ),
-                Err(err) => println!(
-                    "Не удалось сохранить csv-файл {:?}: {}",
-                    parser.get_output(),
-                    err
-                ),
-            };
+            if parser.transactions().is_empty() {
+                println!("Нет новых транзакций для обработки: {}", parser.name());
+            } else {
+                match parser.write_csv() {
+                    Ok(()) => println!(
+                        "Обработка транзакций успешно закончена: {:?}",
+                        parser.get_output()
+                    ),
+                    Err(err) => println!(
+                        "Не удалось сохранить csv-файл {:?}: {}",
+                        parser.get_output(),
+                        err
+                    ),
+                };
+            }
         }
     }
+
+    // Update last parsed datetime to current time
+    cfg.last_parsed_datetime = Some(Local::now().naive_local());
+    confy::store_path(cfg_path, cfg)?;
 
     Ok(())
 }

@@ -1,9 +1,13 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use chrono::NaiveDateTime;
 use scraper::{Html, Selector};
 
 use crate::{AppConfig, Parser, Transaction};
+
+/// Date format from statement
+const BYBIT_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
 pub struct BybitParser {
     input: PathBuf,
@@ -25,6 +29,10 @@ impl BybitParser {
 }
 
 impl Parser for BybitParser {
+    fn name(&self) -> &'static str {
+        "Bybit"
+    }
+
     fn get_output(&self) -> &std::path::PathBuf {
         &self.output
     }
@@ -79,6 +87,15 @@ impl Parser for BybitParser {
                     .unwrap_or_default();
 
                 let category = "?".to_string();
+
+                // Skip transactions that were already processed
+                if let Some(last_parsed) = cfg.last_parsed_datetime
+                    && let Ok(tx_date) =
+                        NaiveDateTime::parse_from_str(&date_time, BYBIT_DATE_FORMAT)
+                    && tx_date <= last_parsed
+                {
+                    continue;
+                }
 
                 let mut transaction = Transaction {
                     date_time,

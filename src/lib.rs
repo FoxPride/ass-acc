@@ -1,12 +1,46 @@
 use anyhow::{Context, Result};
+use chrono::NaiveDateTime;
 use csv::WriterBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Custom serde format for NaiveDateTime: "%d-%m-%Y %H:%M"
+pub mod datetime_format {
+    use chrono::NaiveDateTime;
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    const FORMAT: &str = "%d-%m-%Y %H:%M";
+
+    pub fn serialize<S>(date: &Option<NaiveDateTime>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match date {
+            Some(dt) => serializer.serialize_str(&dt.format(FORMAT).to_string()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<NaiveDateTime>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: Option<String> = Option::deserialize(deserializer)?;
+        match s {
+            Some(ref str) if !str.is_empty() => NaiveDateTime::parse_from_str(str, FORMAT)
+                .map(Some)
+                .map_err(serde::de::Error::custom),
+            _ => Ok(None),
+        }
+    }
+}
+
 pub mod parsers;
 
 pub trait Parser {
+    fn name(&self) -> &'static str;
+
     fn get_output(&self) -> &PathBuf;
 
     fn transactions(&self) -> &[Transaction];
@@ -72,6 +106,8 @@ impl Transaction {
 pub struct AppConfig {
     pub input_folder: String,
     pub output_folder: String,
+    #[serde(with = "datetime_format", default)]
+    pub last_parsed_datetime: Option<NaiveDateTime>,
     pub ocr_models: (String, String),
     pub ttb_channels: Vec<String>,
     pub rules: Vec<RenameRule>,

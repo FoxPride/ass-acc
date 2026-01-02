@@ -1,9 +1,13 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use chrono::NaiveDateTime;
 use regex::Regex;
 
 use crate::{AppConfig, Parser, Transaction};
+
+/// Date format from statement
+const TTB_DATE_FORMAT: &str = "%-d %b %y %H:%M";
 
 pub struct TTBParser {
     input: PathBuf,
@@ -25,6 +29,10 @@ impl TTBParser {
 }
 
 impl Parser for TTBParser {
+    fn name(&self) -> &'static str {
+        "TTB"
+    }
+
     fn get_output(&self) -> &PathBuf {
         &self.output
     }
@@ -111,6 +119,14 @@ impl Parser for TTBParser {
                         amount_idx = 6 + i;
                         break;
                     }
+                }
+
+                // Skip transactions that were already processed
+                if let Some(last_parsed) = cfg.last_parsed_datetime
+                    && let Ok(tx_date) = NaiveDateTime::parse_from_str(&date_time, TTB_DATE_FORMAT)
+                    && tx_date <= last_parsed
+                {
+                    continue;
                 }
 
                 let category = parts[4..channel_idx].join(" ");

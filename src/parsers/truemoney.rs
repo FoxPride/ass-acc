@@ -1,4 +1,5 @@
 use anyhow::Context;
+use chrono::NaiveDateTime;
 use image::{DynamicImage, GenericImageView};
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use regex::Regex;
@@ -6,6 +7,9 @@ use rten::Model;
 use std::path::PathBuf;
 
 use crate::{AppConfig, Parser, Transaction};
+
+/// Date format from statement
+const TRUEMONEY_DATE_FORMAT: &str = "%d %B %Y %H:%M";
 
 struct ImageRegion {
     pub x: u32,
@@ -128,6 +132,10 @@ impl TrueMoneyParser {
 }
 
 impl Parser for TrueMoneyParser {
+    fn name(&self) -> &'static str {
+        "TrueMoney"
+    }
+
     fn get_output(&self) -> &PathBuf {
         &self.output
     }
@@ -198,6 +206,17 @@ impl Parser for TrueMoneyParser {
                             } else {
                                 transaction.date_time = format!("{} ??:??", date);
                                 println!("Warning! Invalid time format {text}");
+                            }
+
+                            // Skip transactions that were already processed
+                            if let Some(last_parsed) = cfg.last_parsed_datetime
+                                && let Ok(tx_date) = NaiveDateTime::parse_from_str(
+                                    &transaction.date_time,
+                                    TRUEMONEY_DATE_FORMAT,
+                                )
+                                && tx_date <= last_parsed
+                            {
+                                continue;
                             }
 
                             let mut renamed = transaction.clone();
