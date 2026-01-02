@@ -232,6 +232,14 @@ fn find_regions(
 
     let mut y = 0u32;
 
+    // Skip to header area
+    for scan_y in 0..img.height() {
+        if img.get_pixel(0, scan_y)[0] == cfg.region_config.date_background {
+            y = scan_y;
+            break;
+        }
+    }
+
     while y < img.height() {
         let (colored_pixels, should_skip) = set_top_bound(img, y, &mut state, &cfg.region_config);
 
