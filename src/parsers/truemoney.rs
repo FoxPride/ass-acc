@@ -200,8 +200,10 @@ impl Parser for TrueMoneyParser {
                                 println!("Warning! Invalid time format {text}");
                             }
 
-                            transaction.apply_rename_rules(&cfg.rules);
-                            self.transactions.push(transaction.clone());
+                            let mut renamed = transaction.clone();
+                            renamed.apply_rename_rules(&cfg.rules);
+
+                            self.transactions.push(renamed);
                         }
                         TransactionType::Description => transaction.description = text,
                         TransactionType::Amount => {
