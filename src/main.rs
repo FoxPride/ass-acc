@@ -22,6 +22,9 @@ enum Commands {
 
     /// Upload csv from Output folder to FireFly-III
     Upload(AddArgs),
+
+    /// Clear Input and Output folders
+    Clear,
 }
 
 #[derive(Args)]
@@ -48,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
             Some(address) => upload_statements(&mut cfg, &address).await,
             None => panic!("Ошибка: Укажите адрес загрузки!"),
         },
+        Commands::Clear => clear_folders(&mut cfg),
     }
 }
 
@@ -220,5 +224,37 @@ async fn upload_statement(
         .await?;
 
     println!("{content}");
+    Ok(())
+}
+
+fn clear_folders(cfg: &mut AppConfig) -> anyhow::Result<()> {
+    // remove everything except Images folder
+    for entry in std::fs::read_dir(&cfg.input_folder)?.filter_map(|e| e.ok()) {
+        let path = entry.path();
+
+        if path.is_file() {
+            std::fs::remove_file(path)?;
+        } else if path.is_dir() && path.file_name().and_then(|n| n.to_str()) == Some("Images") {
+            for entry in std::fs::read_dir(path)?.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                std::fs::remove_file(path)?;
+            }
+        }
+    }
+
+    // remove everything except upload templates
+    for entry in std::fs::read_dir(&cfg.output_folder)?.filter_map(|e| e.ok()) {
+        let path = entry.path();
+
+        if path.is_file()
+            && let Some(ext) = path.extension().and_then(|e| e.to_str())
+        {
+            match ext {
+                "json" => {}
+                _ => std::fs::remove_file(path)?,
+            }
+        }
+    }
+
     Ok(())
 }
