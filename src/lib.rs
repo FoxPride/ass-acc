@@ -51,7 +51,7 @@ pub trait Parser {
         let mut csv_writer = WriterBuilder::new()
             .delimiter(b';')
             .from_path(self.get_output())
-            .with_context(|| format!("Ошибка открытия файла: {:?}", self.get_output()))?;
+            .with_context(|| format!("Error opening file: {:?}", self.get_output()))?;
 
         csv_writer.write_record(["Category", "Description", "Date Time", "Amount"])?;
 
@@ -63,7 +63,7 @@ pub trait Parser {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Transaction {
     pub date_time: String,
     pub category: String,
@@ -114,7 +114,6 @@ pub struct AppConfig {
     pub access_token: String,
     pub client_secret: String,
     pub bybit_selectors: BybitSelectors,
-    pub truemoney_config: TrueMoneyConfig,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -123,34 +122,6 @@ pub struct BybitSelectors {
     pub status: String,
     pub amount: String,
     pub datetime: String,
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct TrueMoneyConfig {
-    pub region_config: TrueMoneyRegionConfig,
-    pub date_params: TrueMoneyRegionSearchParams,
-    pub description_params: TrueMoneyRegionSearchParams,
-    pub amount_params: TrueMoneyRegionSearchParams,
-    pub time_params: TrueMoneyRegionSearchParams,
-    pub search_params: TrueMoneyRegionSearchParams,
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct TrueMoneyRegionConfig {
-    pub bound_offset: u32,
-    pub transaction_background: u8,
-    pub date_background: u8,
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct TrueMoneyRegionSearchParams {
-    pub region_x: u32,
-    pub region_width: u32,
-    pub left_bound_start: u32,
-    pub right_bound_start: u32,
-    pub current_region_skip: u32,
-    pub next_region_skip: i32,
-    pub empty_column_threshold: u32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -162,4 +133,89 @@ pub struct RenameRule {
     pub description: Option<String>,
     #[serde(default)]
     pub amount: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rule(regex: &str, category: &str) -> RenameRule {
+        RenameRule {
+            regex: Regex::new(regex).unwrap(),
+            category: category.to_string(),
+            description: None,
+            amount: None,
+        }
+    }
+
+    fn tx() -> Transaction {
+        Transaction {
+            date_time: "06 July 2026 13:25".to_string(),
+            category: "?".to_string(),
+            amount: "-20.00".to_string(),
+            description: "True Money Wallet".to_string(),
+        }
+    }
+
+    #[test]
+    fn to_csv_row_uses_firefly_column_order() {
+        let t = tx();
+        assert_eq!(
+            t.to_csv_row(),
+            vec!["?", "True Money Wallet", "06 July 2026 13:25", "-20.00"]
+        );
+    }
+
+    #[test]
+    fn rename_rule_updates_category_only_by_default() {
+        let mut t = tx();
+        t.apply_rename_rules(&[rule("^True Money", "Transfer out")]);
+        assert_eq!(t.category, "Transfer out");
+        // description untouched when rule has no replacement
+        assert_eq!(t.description, "True Money Wallet");
+    }
+
+    #[test]
+    fn rename_rule_replaces_description_when_present() {
+        let mut t = tx();
+        let mut r = rule("^True Money", "Transfer out");
+        r.description = Some("TrueMoney".to_string());
+        t.apply_rename_rules(&[r]);
+        assert_eq!(t.category, "Transfer out");
+        assert_eq!(t.description, "TrueMoney");
+    }
+
+    #[test]
+    fn rename_rule_skips_non_matching_regex() {
+        let mut t = tx();
+        t.apply_rename_rules(&[rule("^VILLA MARKET", "Food")]);
+        assert_eq!(t.category, "?");
+        assert_eq!(t.description, "True Money Wallet");
+    }
+
+    #[test]
+    fn rename_rule_amount_filter_rejects_mismatch() {
+        let mut t = tx();
+        let mut r = rule("^True Money", "Transfer out");
+        r.amount = Some("-100.00".to_string());
+        t.apply_rename_rules(&[r]);
+        assert_eq!(t.category, "?");
+    }
+
+    #[test]
+    fn rename_rule_amount_filter_accepts_match() {
+        let mut t = tx();
+        let mut r = rule("^True Money", "Transfer out");
+        r.amount = Some("-20.00".to_string());
+        t.apply_rename_rules(&[r]);
+        assert_eq!(t.category, "Transfer out");
+    }
+
+    #[test]
+    fn rename_rules_first_match_wins() {
+        let mut t = tx();
+        let rules = vec![rule("^True Money", "First"), rule("^True", "Second")];
+        t.apply_rename_rules(&rules);
+        assert_eq!(t.category, "First");
+    }
 }
