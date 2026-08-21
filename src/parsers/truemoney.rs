@@ -1,115 +1,42 @@
+use std::path::PathBuf;
+
 use anyhow::Context;
 use chrono::NaiveDateTime;
 use image::{DynamicImage, GenericImageView};
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use regex::Regex;
 use rten::Model;
-use std::path::PathBuf;
+use rten_imageproc::{BoundingRect, RotatedRect};
 
 use crate::{AppConfig, Parser, Transaction};
 
 /// Date format from statement
 const TRUEMONEY_DATE_FORMAT: &str = "%d %B %Y %H:%M";
 
-struct ImageRegion {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-}
+/// Cells whose horizontal center is left of this x belong to the date column.
+const DATE_COLUMN_MAX_X: i32 = 200;
 
-#[derive(PartialEq, Clone)]
-enum TransactionType {
+/// Cells whose horizontal center is right of this x belong to the amount column.
+const AMOUNT_COLUMN_MIN_X: i32 = 900;
+
+/// Padding (in pixels) added around a detected text box before recognition.
+const CELL_PADDING: i32 = 6;
+
+/// A column of a TrueMoney transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Column {
     Date,
-    Time,
     Description,
+    Time,
     Amount,
-    Search,
 }
 
-struct RegionSearchMask {
-    search_type: TransactionType,
-    region_x: u32,
-    region_y: u32,
-    region_width: u32,
-    region_height: u32,
-    left_bound_start: u32,
-    right_bound_start: u32,
-    current_region_skip: u32,
-    next_region_skip: i32,
-    region_y_found: bool,
-    empty_column_threshold: u32,
-}
-
-impl RegionSearchMask {
-    fn new(initial_params: &crate::TrueMoneyRegionSearchParams) -> Self {
-        Self {
-            search_type: TransactionType::Date,
-            region_x: initial_params.region_x,
-            region_y: 0,
-            region_width: initial_params.region_width,
-            region_height: 0,
-            left_bound_start: initial_params.left_bound_start,
-            right_bound_start: initial_params.right_bound_start,
-            current_region_skip: initial_params.current_region_skip,
-            next_region_skip: initial_params.next_region_skip,
-            region_y_found: false,
-            empty_column_threshold: initial_params.empty_column_threshold,
-        }
-    }
-
-    fn update_for_next_search(&mut self, cfg: &crate::TrueMoneyConfig) {
-        match self.search_type {
-            TransactionType::Date => {
-                self.search_type = TransactionType::Description;
-                self.region_x = cfg.description_params.region_x;
-                self.region_width = cfg.description_params.region_width;
-                self.left_bound_start = cfg.description_params.left_bound_start;
-                self.right_bound_start = cfg.description_params.right_bound_start;
-                self.current_region_skip = cfg.description_params.current_region_skip;
-                self.next_region_skip = cfg.description_params.next_region_skip;
-                self.region_y_found = false;
-                self.empty_column_threshold = cfg.description_params.empty_column_threshold;
-            }
-            TransactionType::Time => {
-                self.search_type = TransactionType::Search;
-                self.next_region_skip = cfg.search_params.next_region_skip;
-            }
-            TransactionType::Description => {
-                self.search_type = TransactionType::Amount;
-                self.region_x = cfg.amount_params.region_x;
-                self.region_width = cfg.amount_params.region_width;
-                self.left_bound_start = cfg.amount_params.left_bound_start;
-                self.right_bound_start = cfg.amount_params.right_bound_start;
-                self.current_region_skip = cfg.amount_params.current_region_skip;
-                self.next_region_skip = cfg.amount_params.next_region_skip;
-                self.region_y_found = false;
-                self.empty_column_threshold = cfg.amount_params.empty_column_threshold;
-            }
-            TransactionType::Amount => {
-                self.search_type = TransactionType::Time;
-                self.region_x = cfg.time_params.region_x;
-                self.region_width = cfg.time_params.region_width;
-                self.left_bound_start = cfg.time_params.left_bound_start;
-                self.right_bound_start = cfg.time_params.right_bound_start;
-                self.current_region_skip = cfg.time_params.current_region_skip;
-                self.next_region_skip = cfg.time_params.next_region_skip;
-                self.region_y_found = false;
-                self.empty_column_threshold = cfg.time_params.empty_column_threshold;
-            }
-            TransactionType::Search => {
-                self.search_type = TransactionType::Date;
-                self.region_x = cfg.date_params.region_x;
-                self.region_width = cfg.date_params.region_width;
-                self.left_bound_start = cfg.date_params.left_bound_start;
-                self.right_bound_start = cfg.date_params.right_bound_start;
-                self.current_region_skip = cfg.date_params.current_region_skip;
-                self.next_region_skip = cfg.date_params.next_region_skip;
-                self.region_y_found = false;
-                self.empty_column_threshold = cfg.date_params.empty_column_threshold;
-            }
-        }
-    }
+/// A piece of recognized text together with the column it belongs to and its
+/// vertical position on the statement.
+struct DetectedCell {
+    column: Column,
+    text: String,
+    top: i32,
 }
 
 pub struct TrueMoneyParser {
@@ -145,22 +72,11 @@ impl Parser for TrueMoneyParser {
     }
 
     fn parse(&mut self, cfg: &mut AppConfig, _cfg_path: &str) -> anyhow::Result<()> {
-        let (detection, recognition) = &cfg.ocr_models;
-        let detection_model = Model::load_file(detection)
-            .with_context(|| format!("Ошибка загрузки модели обнаружения: {detection}"))?;
-        let recognition_model = Model::load_file(recognition)
-            .with_context(|| format!("Ошибка загрузки модели распознавания: {recognition}"))?;
-
-        let engine = OcrEngine::new(OcrEngineParams {
-            detection_model: Some(detection_model),
-            recognition_model: Some(recognition_model),
-            ..Default::default()
-        })
-        .with_context(|| "Не удалось инициализировать OCR")?;
+        let engine = build_engine(cfg)?;
 
         let date_rg = Regex::new(r"(\d{1,2})\s+(\w+)\s+(\d{4})").unwrap();
-        let time_rg = Regex::new(r"^([01]?\d|2[0-3]):([0-5]\d)$").unwrap();
-        let amount_rg = Regex::new(r"([\d,\.]+)").unwrap();
+        let time_rg = Regex::new(r"([01]?\d|2[0-3]):([0-5]\d)").unwrap();
+        let amount_rg = Regex::new(r"(\d[\d,]*\.\d{1,2})").unwrap();
 
         for entry in std::fs::read_dir(&self.input)?.filter_map(|e| e.ok()) {
             let path = entry.path();
@@ -170,42 +86,40 @@ impl Parser for TrueMoneyParser {
                 && ext == "jpg"
             {
                 let img = image::open(path)?;
+                let cells = detect_cells(&engine, &img, &time_rg)?;
 
-                let regions = find_regions(&img, &cfg.truemoney_config);
+                // Buffers for the transaction currently being assembled. The date
+                // header is carried forward until a new one is seen, since several
+                // transactions can share the same date header.
+                let mut current_date = String::new();
+                let mut current_description = String::new();
+                let mut current_amount = String::new();
 
-                // buffers for parsing
-                let mut transaction = Transaction::default();
-                let mut date = String::new();
-
-                for (transaction_type, region) in regions {
-                    let img = extract_region(&img, &region).to_rgb8();
-                    let img_source = ImageSource::from_bytes(img.as_raw(), img.dimensions())?;
-                    let ocr_input = engine.prepare_input(img_source)?;
-
-                    let text = engine.get_text(&ocr_input).unwrap();
-
-                    match transaction_type {
-                        TransactionType::Date => {
-                            if let Some(caps) = date_rg.captures(&text) {
-                                let day = &caps[1];
-                                let month = &caps[2];
-                                let year = &caps[3];
-
-                                date = format!("{} {} {}", day, month, year);
-                            } else {
-                                date = "??".to_string();
-                                println!("Warning! Invalid date format: {text}");
+                for cell in cells {
+                    match cell.column {
+                        Column::Date => {
+                            if let Some(caps) = date_rg.captures(&cell.text) {
+                                current_date = format!("{} {} {}", &caps[1], &caps[2], &caps[3]);
                             }
                         }
-                        TransactionType::Time => {
-                            if let Some(caps) = time_rg.captures(text.trim()) {
-                                let hours = &caps[1];
-                                let minutes = &caps[2];
+                        Column::Description => current_description = cell.text,
+                        Column::Amount => {
+                            current_amount = amount_rg
+                                .captures(&cell.text)
+                                .map(|caps| format!("-{}", &caps[1]))
+                                .unwrap_or_else(|| "??".to_string());
+                        }
+                        Column::Time => {
+                            let mut transaction = Transaction {
+                                date_time: format!("{} ??:??", current_date),
+                                category: String::new(),
+                                amount: current_amount.clone(),
+                                description: current_description.clone(),
+                            };
 
-                                transaction.date_time = format!("{} {}:{}", date, hours, minutes);
-                            } else {
-                                transaction.date_time = format!("{} ??:??", date);
-                                println!("Warning! Invalid time format {text}");
+                            if let Some(caps) = time_rg.captures(&cell.text) {
+                                transaction.date_time =
+                                    format!("{} {}:{}", current_date, &caps[1], &caps[2]);
                             }
 
                             // Skip transactions that were already processed
@@ -219,22 +133,9 @@ impl Parser for TrueMoneyParser {
                                 continue;
                             }
 
-                            let mut renamed = transaction.clone();
-                            renamed.apply_rename_rules(&cfg.rules);
-
-                            self.transactions.push(renamed);
+                            transaction.apply_rename_rules(&cfg.rules);
+                            self.transactions.push(transaction);
                         }
-                        TransactionType::Description => transaction.description = text,
-                        TransactionType::Amount => {
-                            if let Some(caps) = amount_rg.captures(&text) {
-                                let amount = &caps[1];
-                                transaction.amount = format!("-{amount}");
-                            } else {
-                                transaction.amount = "??".to_string();
-                                println!("Warning! Invalid amount format {text}");
-                            }
-                        }
-                        TransactionType::Search => (),
                     }
                 }
             }
@@ -244,163 +145,105 @@ impl Parser for TrueMoneyParser {
     }
 }
 
-fn find_regions(
+fn build_engine(cfg: &AppConfig) -> anyhow::Result<OcrEngine> {
+    let (detection, recognition) = &cfg.ocr_models;
+    let detection_model = Model::load_file(detection)
+        .with_context(|| format!("Error loading detection model: {detection}"))?;
+    let recognition_model = Model::load_file(recognition)
+        .with_context(|| format!("Error loading recognition model: {recognition}"))?;
+
+    OcrEngine::new(OcrEngineParams {
+        detection_model: Some(detection_model),
+        recognition_model: Some(recognition_model),
+        ..Default::default()
+    })
+    .with_context(|| "Failed to initialize OCR")
+}
+
+/// Detects text boxes with the OCR detection model, recognizes each box
+/// individually and classifies it into a transaction column. Results are
+/// returned sorted top-to-bottom in reading order.
+fn detect_cells(
+    engine: &OcrEngine,
     img: &DynamicImage,
-    cfg: &crate::TrueMoneyConfig,
-) -> Vec<(TransactionType, ImageRegion)> {
-    let mut state = RegionSearchMask::new(&cfg.date_params);
-    let mut regions = Vec::new();
+    time_rg: &Regex,
+) -> anyhow::Result<Vec<DetectedCell>> {
+    let (width, height) = img.dimensions();
+    let rgb = img.to_rgb8();
+    let input = engine.prepare_input(ImageSource::from_bytes(rgb.as_raw(), rgb.dimensions())?)?;
 
-    let mut y = 0u32;
+    let words = engine.detect_words(&input)?;
+    let lines = engine.find_text_lines(&input, &words);
 
-    // Skip to header area
-    for scan_y in 0..img.height() {
-        if img.get_pixel(0, scan_y)[0] == cfg.region_config.date_background {
-            y = scan_y;
-            break;
-        }
-    }
+    let mut cells = Vec::new();
 
-    while y < img.height() {
-        let (colored_pixels, should_skip) = set_top_bound(img, y, &mut state, &cfg.region_config);
+    for line in lines {
+        let Some((left, top, right, bottom)) = line_bounds(&line) else {
+            continue;
+        };
 
-        if should_skip {
-            y += state.current_region_skip;
+        let x = (left - CELL_PADDING).max(0) as u32;
+        let y = (top - CELL_PADDING).max(0) as u32;
+        let w = ((right + CELL_PADDING).min(width as i32) as u32).saturating_sub(x);
+        let h = ((bottom + CELL_PADDING).min(height as i32) as u32).saturating_sub(y);
+        if w == 0 || h == 0 {
             continue;
         }
 
-        if state.region_y_found && colored_pixels == 0 {
-            // bottom bound
-            state.region_height = y - state.region_y + cfg.region_config.bound_offset;
-
-            set_left_bound(img, &mut state, &cfg.region_config);
-            set_right_bound(img, &mut state, &cfg.region_config);
-
-            regions.push((
-                state.search_type.clone(),
-                ImageRegion {
-                    x: state.region_x,
-                    y: state.region_y,
-                    width: state.region_width,
-                    height: state.region_height,
-                },
-            ));
-
-            state.update_for_next_search(cfg);
-
-            y = y.saturating_add_signed(state.next_region_skip);
-
-            if y >= img.height() {
-                break;
-            }
-
-            if state.search_type == TransactionType::Search {
-                if img.get_pixel(state.region_x, y)[0] == cfg.region_config.transaction_background {
-                    state.search_type = TransactionType::Date;
-                }
-
-                state.update_for_next_search(cfg);
-            }
+        let crop = img.crop_imm(x, y, w, h).to_rgb8();
+        let crop_input =
+            engine.prepare_input(ImageSource::from_bytes(crop.as_raw(), crop.dimensions())?)?;
+        let text = engine.get_text(&crop_input)?.trim().to_string();
+        if text.is_empty() {
+            continue;
         }
 
-        y += 1;
+        let center_x = (left + right) / 2;
+        let column = classify_column(center_x, &text, time_rg);
+
+        cells.push(DetectedCell { column, text, top });
     }
 
-    regions
+    cells.sort_by_key(|cell| cell.top);
+    Ok(cells)
 }
 
-fn set_top_bound(
-    img: &DynamicImage,
-    y: u32,
-    state: &mut RegionSearchMask,
-    config: &crate::TrueMoneyRegionConfig,
-) -> (u32, bool) {
-    let mut colored_pixels = 0u32;
-
-    // Search for top bound by scanning horizontally
-    for x in state.region_x..(state.region_x + state.region_width) {
-        let pixel = img.get_pixel(x, y)[0];
-
-        if pixel != config.date_background && pixel != config.transaction_background {
-            if !state.region_y_found {
-                // First time finding a matching pixel - set top bound and signal to skip ahead
-                state.region_y = y - config.bound_offset;
-                state.region_y_found = true;
-                colored_pixels += 1;
-                return (colored_pixels, true);
-            } else {
-                colored_pixels += 1;
-            }
-        }
-    }
-
-    (colored_pixels, false)
-}
-
-fn set_left_bound(
-    img: &DynamicImage,
-    state: &mut RegionSearchMask,
-    config: &crate::TrueMoneyRegionConfig,
-) {
-    let mut empty_columns = 0u32;
-
-    for x in (0..=state.left_bound_start).rev() {
-        let colored_pixels =
-            count_colored_pixels_in_column(img, x, state.region_y, state.region_height, config);
-
-        if colored_pixels == 0 {
-            empty_columns += 1;
-        } else {
-            empty_columns = 0;
-        }
-
-        if empty_columns > state.empty_column_threshold {
-            state.region_x = x + state.empty_column_threshold - config.bound_offset;
-            break;
-        }
+fn classify_column(center_x: i32, text: &str, time_rg: &Regex) -> Column {
+    if center_x > AMOUNT_COLUMN_MIN_X {
+        Column::Amount
+    } else if center_x < DATE_COLUMN_MAX_X {
+        Column::Date
+    } else if time_rg.is_match(text) {
+        Column::Time
+    } else {
+        Column::Description
     }
 }
 
-fn set_right_bound(
-    img: &DynamicImage,
-    state: &mut RegionSearchMask,
-    config: &crate::TrueMoneyRegionConfig,
-) {
-    let mut empty_columns = 0u32;
+/// Returns the axis-aligned bounding box `(left, top, right, bottom)` of a line
+/// of detected words.
+fn line_bounds(line: &[RotatedRect]) -> Option<(i32, i32, i32, i32)> {
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
 
-    for x in state.right_bound_start..img.width() {
-        let colored_pixels =
-            count_colored_pixels_in_column(img, x, state.region_y, state.region_height, config);
-
-        if colored_pixels == 0 {
-            empty_columns += 1;
-        } else {
-            empty_columns = 0;
-        }
-
-        if empty_columns > state.empty_column_threshold {
-            state.region_width =
-                x - state.region_x - state.empty_column_threshold + config.bound_offset;
-            break;
-        }
+    for word in line {
+        let b = word.bounding_rect();
+        min_x = min_x.min(b.left());
+        min_y = min_y.min(b.top());
+        max_x = max_x.max(b.right());
+        max_y = max_y.max(b.bottom());
     }
-}
 
-fn count_colored_pixels_in_column(
-    img: &DynamicImage,
-    x: u32,
-    start_y: u32,
-    height: u32,
-    config: &crate::TrueMoneyRegionConfig,
-) -> u32 {
-    (start_y..(start_y + height))
-        .filter(|&y| {
-            img.get_pixel(x, y)[0] != config.date_background
-                && img.get_pixel(x, y)[0] != config.transaction_background
-        })
-        .count() as u32
-}
+    if min_x == f32::MAX {
+        return None;
+    }
 
-fn extract_region(img: &DynamicImage, region: &ImageRegion) -> DynamicImage {
-    img.crop_imm(region.x, region.y, region.width, region.height)
+    Some((
+        min_x.floor() as i32,
+        min_y.floor() as i32,
+        max_x.ceil() as i32,
+        max_y.ceil() as i32,
+    ))
 }
