@@ -43,10 +43,10 @@ impl Parser for TTBParser {
 
     fn parse(&mut self, cfg: &mut AppConfig, cfg_path: &str) -> anyhow::Result<()> {
         let bytes = std::fs::read(self.input.as_path())
-            .with_context(|| format!("Ошибка открытия файла: {:?}", self.input.as_path()))?;
+            .with_context(|| format!("Error opening file: {:?}", self.input.as_path()))?;
 
         let parsed = pdf_extract::extract_text_from_mem(&bytes)
-            .with_context(|| format!("Ошибка обработки файла: {:?}", self.input.as_path()))?;
+            .with_context(|| format!("Error processing file: {:?}", self.input.as_path()))?;
 
         let date_rg = Regex::new(r"^\d{1,2}\s+\w{3}\s+\d{2}\s+\d{2}:\d{2}").unwrap();
         let amount_rg = Regex::new(r"\d{1}\.\d{2}").unwrap();
@@ -86,9 +86,9 @@ impl Parser for TTBParser {
                 }
 
                 if channel_idx == 0 {
-                    println!("  Не найден канал на строке: {}", to_parse);
-                    println!("  Известные каналы: {:?}", &cfg.ttb_channels);
-                    println!("  Введите новый канал: ");
+                    println!("  Channel not found on line: {}", to_parse);
+                    println!("  Known channels: {:?}", cfg.ttb_channels);
+                    println!("  Enter a new channel: ");
 
                     let mut new_channel = String::new();
                     std::io::stdin().read_line(&mut new_channel).unwrap();
@@ -107,7 +107,7 @@ impl Parser for TTBParser {
                     }
 
                     if channel_idx == 0 {
-                        println!("  Не могу найти индекс канала");
+                        println!("  Cannot find channel index");
                         continue;
                     }
                 }

@@ -1,132 +1,122 @@
 # ass-acc
 
-CLI-приложение на Rust для парсинга финансовых выписок (PDF, HTML, изображения через OCR)
-и подготовки CSV для загрузки в FireFly-III
+A Rust CLI application for parsing financial statements (PDF, HTML, images via OCR)
+and preparing CSVs for upload to FireFly-III.
 
-## Возможности
+## Features
 
-- Парсинг источников:
+- Parsing sources:
   - `PDF` (TTB)
   - `HTML` (Bybit)
-  - `JPG` из папки `Images` (TrueMoney OCR)
-- Применение правил переименования транзакций (`[[rules]]`) к категории/описанию
-- Экспорт результата в CSV разделенного `;` с колонками:
+  - `JPG` from the `Images` folder (TrueMoney, via OCR)
+- Applies transaction rename rules (`[[rules]]`) to category/description
+- Exports the result to a `;`-delimited CSV with the columns:
   `Category;Description;Date Time;Amount`
-- Загрузка подготовленных CSV в FireFly-III Auto Upload endpoint
+- Uploads prepared CSVs to the FireFly-III Auto Upload endpoint
 
-## Требования
+## Requirements
 
 - Rust toolchain
-- Файл конфигурации: `Settings/config.toml`
-- Для OCR (TrueMoney): две RTEN-модели (detector + recognizer)
+- Configuration file: `Settings/config.toml`
+- For OCR (TrueMoney): two RTEN models (detector + recognizer)
 
-## Сборка и запуск
+## Build and run
 
-### Сборка
+### Build
 
 ```bash
-# Откройте терминал (Command Prompt или PowerShell для Windows, Terminal для macOS или Linux)
-
-# Убедитесь, что Git установлен
-# Посетите https://git-scm.com чтобы скачать и установить Git, если ещё не установлен
-
-# Клонируйте репозиторий 
+# Clone the repository
 git clone https://github.com/FoxPride/ass-acc.git
 
-# Перейдите в директорию проекта
+# Enter the project directory
 cd ass-acc
 
-# Сборка проекта (рекомендуется использовать release сборку из-за OCR)
+# Build the project (a release build is recommended because of OCR)
 cargo build --release
 ```
 
-### Основные команды
+### Main commands
 
-Парсинг входных файлов:
+Parse the input files:
 
 ```bash
 cargo run -- parse
 ```
 
-Загрузка CSV в FireFly-III (по адресу хоста):
+Upload the CSVs to FireFly-III (by host address):
 
 ```bash
 cargo run -- upload <address>
 ```
 
-Пример:
+Example:
 
 ```bash
 cargo run -- upload 192.168.1.50
 ```
 
-Очистка входных/выходных папок:
+Clear the input/output folders:
 
 ```bash
 cargo run -- clear
 ```
 
-## Как работает поток данных
+## Data flow
 
-1. `parse` читает `Settings/config.toml`
-2. Сканирует `input_folder`:
-   - `*.pdf` -> парсер TTB
-   - `*.html` -> парсер Bybit
-   - папка `Images` -> OCR-парсер TrueMoney
-3. Для каждой транзакции применяет `[[rules]]`
-4. Пишет CSV в `output_folder`
-5. Обновляет `last_parsed_datetime` в конфиге
+1. `parse` reads `Settings/config.toml`
+2. Scans `input_folder`:
+   - `*.pdf` -> TTB parser
+   - `*.html` -> Bybit parser
+   - the `Images` folder -> TrueMoney OCR parser
+3. Applies `[[rules]]` to each transaction
+4. Writes the CSV to `output_folder`
+5. Updates `last_parsed_datetime` in the config
 
-Команда `upload` отправляет CSV из `output_folder` на:
+The `upload` command sends the CSVs from `output_folder` to:
 
 `http://<address>:81/autoupload?secret=<client_secret>`
 
-с `Authorization: Bearer <access_token>`
+with an `Authorization: Bearer <access_token>` header.
 
-## Конфигурация (`Settings/config.toml`)
+## Configuration (`Settings/config.toml`)
 
-Ниже описаны все поля, которые реально используются приложением.
+All fields actually used by the application are described below.
 
-### Базовые поля
+### Base fields
 
-- `input_folder` - папка с входными файлами для `parse`
-- `output_folder` - папка, куда пишутся CSV (`TTB.csv`, `Bybit.csv`, `TrueMoney.csv`)
-- `last_parsed_datetime` - фильтр "не брать старые операции". Формат строго `%d-%m-%Y %H:%M`
-- `ocr_models` - массив из **двух** путей к RTEN-моделям в порядке:
+- `input_folder` - folder with the input files for `parse`
+- `output_folder` - folder where the CSVs are written (`TTB.csv`, `Bybit.csv`, `TrueMoney.csv`)
+- `last_parsed_datetime` - "skip older transactions" filter. Strict format `%d-%m-%Y %H:%M`
+- `ocr_models` - an array of **two** paths to the RTEN models, in order:
   1) detection
   2) recognition
-- `ttb_channels` - список маркеров каналов для PDF TTB
-- `access_token` - Bearer token FireFly-III
-- `client_secret` - секрет для auto upload endpoint
+- `ttb_channels` - list of channel markers for the TTB PDF
+- `access_token` - FireFly-III bearer token
+- `client_secret` - secret for the auto upload endpoint
 
-### Правила переименования `[[rules]]`
+### Rename rules `[[rules]]`
 
-- `regex` - обязательное регулярное выражение для поиска по исходному `description`
-- `category` - обязательная новая категория
-- `description` - опциональная замена описания
-- `amount` - опциональный точный фильтр суммы (строковое сравнение)
+- `regex` - required regular expression matched against the original `description`
+- `category` - required new category
+- `description` - optional replacement description
+- `amount` - optional exact amount filter (string comparison)
 
-Применение идет сверху вниз, используется первое совпавшее правило
+Rules are applied top to bottom; the first matching rule wins.
 
-### Селекторы Bybit (`[bybit_selectors]`)
+### Bybit selectors (`[bybit_selectors]`)
 
-- CSS-селекторы для чтения колонок из HTML-таблицы Bybit
-- Обрабатываются только строки со статусом `Successful`
+- CSS selectors used to read the columns from the Bybit HTML table
+- Only rows with status `Successful` are processed
 
-### Настройки TrueMoney OCR (`[truemoney_config]`)
+### TrueMoney OCR
 
-`region_config` управляет базовыми порогами и геометрией поиска блоков транзакции для OCR
+The TrueMoney parser runs OCR over the `Images` folder. It uses the OCR engine's
+text-detection bounding boxes to locate each transaction cell (date, description,
+time, amount) and recognizes them individually, so no manual region tuning is
+required.
 
-Назначение параметров:
+## `clear` command behavior
 
-- `region_x`, `region_width` - горизонтальная область, где идет поиск
-- `left_bound_start`, `right_bound_start` - стартовые границы сканирования
-- `current_region_skip` - шаг поиска в текущем состоянии OCR-пайплайна
-- `next_region_skip` - шаг перехода к следующему блоку
-- `empty_column_threshold` - порог пустой колонки для определения границ региона
-
-## Поведение команды `clear`
-
-- В `input_folder` удаляет все файлы
-  - Папку `Images` не удаляет, но очищает ее содержимое
-- В `output_folder` удаляет всё, кроме `.json` файлов (шаблоны для upload)
+- In `input_folder`, removes all files
+  - The `Images` folder itself is kept, but its contents are cleared
+- In `output_folder`, removes everything except `.json` files (upload templates)

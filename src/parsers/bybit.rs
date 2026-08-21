@@ -43,7 +43,7 @@ impl Parser for BybitParser {
 
     fn parse(&mut self, cfg: &mut AppConfig, _cfg_path: &str) -> anyhow::Result<()> {
         let html_content = std::fs::read_to_string(self.input.as_path())
-            .with_context(|| format!("Ошибка открытия файла: {:?}", self.input.as_path()))?;
+            .with_context(|| format!("Error opening file: {:?}", self.input.as_path()))?;
         let document = Html::parse_document(&html_content);
 
         let row_selector = Selector::parse("tbody tr").unwrap();
