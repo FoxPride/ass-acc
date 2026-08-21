@@ -74,7 +74,7 @@ cargo run -- clear
 
 The `upload` command sends the CSVs from `output_folder` to:
 
-`http://<address>:81/autoupload?secret=<client_secret>`
+`http://<address>:8081/autoupload?secret=<client_secret>`
 
 with an `Authorization: Bearer <access_token>` header.
 
