@@ -51,7 +51,7 @@ impl Parser for BybitParser {
         &self.transactions
     }
 
-    fn parse(&mut self, cfg: &mut AppConfig, _cfg_path: &str) -> anyhow::Result<()> {
+    fn parse(&mut self, cfg: &mut AppConfig) -> anyhow::Result<()> {
         let html_content = std::fs::read_to_string(self.input.as_path())
             .with_context(|| format!("Error opening file: {:?}", self.input.as_path()))?;
         let document = Html::parse_document(&html_content);

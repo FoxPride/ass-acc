@@ -30,7 +30,7 @@ pub fn parse(cfg: &mut AppConfig, cfg_path: &str) -> anyhow::Result<()> {
             }
         };
 
-        let is_parsed = match parser.parse(cfg, cfg_path) {
+        let is_parsed = match parser.parse(cfg) {
             Ok(()) => true,
             Err(err) => {
                 println!("Error processing transactions: {}", err);

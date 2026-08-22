@@ -96,7 +96,7 @@ fn bybit_parser_matches_expected_output() {
         .join("Bybit.html");
 
     let mut parser = BybitParser::new(input, &cfg.output_folder);
-    parser.parse(&mut cfg, "unused").unwrap();
+    parser.parse(&mut cfg).unwrap();
 
     let expected = expected_transactions("Bybit.csv");
     assert_transactions_eq(parser.transactions(), &expected);
@@ -111,7 +111,7 @@ fn ttb_parser_matches_expected_output() {
         .join("TTB.pdf");
 
     let mut parser = TTBParser::new(input, &cfg.output_folder);
-    parser.parse(&mut cfg, "unused").unwrap();
+    parser.parse(&mut cfg).unwrap();
 
     let expected = expected_transactions("TTB.csv");
     assert_transactions_eq(parser.transactions(), &expected);
@@ -139,7 +139,7 @@ fn truemoney_parser_matches_expected_output() {
     let input = manifest_dir().join("example").join("parse").join("Images");
 
     let mut parser = TrueMoneyParser::new(input, &cfg.output_folder);
-    parser.parse(&mut cfg, "unused").unwrap();
+    parser.parse(&mut cfg).unwrap();
 
     let expected = expected_transactions("TrueMoney.csv");
     assert_transactions_eq(parser.transactions(), &expected);

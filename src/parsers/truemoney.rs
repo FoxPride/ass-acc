@@ -70,7 +70,7 @@ impl Parser for TrueMoneyParser {
         &self.transactions
     }
 
-    fn parse(&mut self, cfg: &mut AppConfig, _cfg_path: &str) -> anyhow::Result<()> {
+    fn parse(&mut self, cfg: &mut AppConfig) -> anyhow::Result<()> {
         let engine = build_engine(cfg)?;
 
         let date_rg = Regex::new(r"(\d{1,2})\s+(\w+)\s+(\d{4})").unwrap();
