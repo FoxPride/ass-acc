@@ -77,7 +77,8 @@ impl Parser for TrueMoneyParser {
         let time_rg = Regex::new(r"([01]?\d|2[0-3]):([0-5]\d)").unwrap();
         let amount_rg = Regex::new(r"(\d[\d,]*\.\d{1,2})").unwrap();
 
-        for entry in std::fs::read_dir(&self.input)?.filter_map(|e| e.ok()) {
+        for entry in std::fs::read_dir(&self.input)? {
+            let entry = entry?;
             let path = entry.path();
 
             if path.is_file()

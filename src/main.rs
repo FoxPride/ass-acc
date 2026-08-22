@@ -19,6 +19,6 @@ async fn main() -> anyhow::Result<()> {
             Some(address) => commands::upload(&mut cfg, &address).await,
             None => Err(anyhow::anyhow!("Error: Specify the upload address!")),
         },
-        Commands::Clear => commands::clear(&mut cfg),
+        Commands::Clear => commands::clear(&cfg),
     }
 }
