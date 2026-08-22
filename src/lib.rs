@@ -108,11 +108,15 @@ pub struct AppConfig {
     pub output_folder: String,
     #[serde(with = "datetime_format", default)]
     pub last_parsed_datetime: Option<NaiveDateTime>,
+    #[serde(default = "default_ocr_models")]
     pub ocr_models: OcrModels,
+    #[serde(default = "default_ttb_channels")]
     pub ttb_channels: Vec<String>,
+    #[serde(default)]
     pub rules: Vec<RenameRule>,
     pub access_token: String,
     pub client_secret: String,
+    #[serde(default = "default_bybit_selectors")]
     pub bybit_selectors: BybitSelectors,
 }
 
@@ -129,6 +133,26 @@ pub struct BybitSelectors {
 pub struct OcrModels {
     pub detection: String,
     pub recognition: String,
+}
+
+fn default_ocr_models() -> OcrModels {
+    OcrModels {
+        detection: "text-detection.rten".to_string(),
+        recognition: "text-recognition.rten".to_string(),
+    }
+}
+
+fn default_ttb_channels() -> Vec<String> {
+    vec!["Auto".to_string(), "Mobile".to_string()]
+}
+
+fn default_bybit_selectors() -> BybitSelectors {
+    BybitSelectors {
+        merchant: ".bycard__trans-table-merch-name-col".to_string(),
+        status: "span".to_string(),
+        amount: "p".to_string(),
+        datetime: "span.text-nowrap".to_string(),
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -224,5 +248,34 @@ mod tests {
         let rules = vec![rule("^True Money", "First"), rule("^True", "Second")];
         t.apply_rename_rules(&rules);
         assert_eq!(t.category, "First");
+    }
+
+    #[test]
+    fn config_loads_defaults_for_optional_fields() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir().join(format!("ass_acc_cfg_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "input_folder = \"in\"\noutput_folder = \"out\"\naccess_token = \"t\"\nclient_secret = \"s\""
+        )
+        .unwrap();
+        drop(file);
+
+        let cfg: AppConfig = confy::load_path(&path).unwrap();
+
+        assert_eq!(cfg.ocr_models.detection, "text-detection.rten");
+        assert_eq!(cfg.ocr_models.recognition, "text-recognition.rten");
+        assert_eq!(cfg.ttb_channels, vec!["Auto".to_string(), "Mobile".to_string()]);
+        assert!(cfg.rules.is_empty());
+        assert_eq!(
+            cfg.bybit_selectors.merchant,
+            ".bycard__trans-table-merch-name-col"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
