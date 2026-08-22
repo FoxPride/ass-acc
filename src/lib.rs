@@ -108,7 +108,7 @@ pub struct AppConfig {
     pub output_folder: String,
     #[serde(with = "datetime_format", default)]
     pub last_parsed_datetime: Option<NaiveDateTime>,
-    pub ocr_models: (String, String),
+    pub ocr_models: OcrModels,
     pub ttb_channels: Vec<String>,
     pub rules: Vec<RenameRule>,
     pub access_token: String,
@@ -122,6 +122,13 @@ pub struct BybitSelectors {
     pub status: String,
     pub amount: String,
     pub datetime: String,
+}
+
+/// Paths to the two RTEN models used by the OCR engine.
+#[derive(Default, Serialize, Deserialize)]
+pub struct OcrModels {
+    pub detection: String,
+    pub recognition: String,
 }
 
 #[derive(Serialize, Deserialize)]

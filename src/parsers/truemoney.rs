@@ -146,7 +146,8 @@ impl Parser for TrueMoneyParser {
 }
 
 fn build_engine(cfg: &AppConfig) -> anyhow::Result<OcrEngine> {
-    let (detection, recognition) = &cfg.ocr_models;
+    let detection = &cfg.ocr_models.detection;
+    let recognition = &cfg.ocr_models.recognition;
     let detection_model = Model::load_file(detection)
         .with_context(|| format!("Error loading detection model: {detection}"))?;
     let recognition_model = Model::load_file(recognition)

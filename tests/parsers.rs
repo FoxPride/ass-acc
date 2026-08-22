@@ -129,7 +129,8 @@ fn truemoney_parser_matches_expected_output() {
 
     // The model paths in config.toml are machine-specific. Bail out gracefully
     // when they are absent instead of failing.
-    let (detection, recognition) = &cfg.ocr_models;
+    let detection = &cfg.ocr_models.detection;
+    let recognition = &cfg.ocr_models.recognition;
     if !Path::new(detection).exists() || !Path::new(recognition).exists() {
         eprintln!("skipping: OCR models not found at {detection:?} / {recognition:?}");
         return;
