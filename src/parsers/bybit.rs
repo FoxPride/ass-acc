@@ -8,6 +8,17 @@ use crate::{AppConfig, Parser, Transaction};
 /// Date format from statement
 const BYBIT_DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
+/// Column indices in the Bybit transaction table.
+const DESCRIPTION_COL: usize = 0;
+const AMOUNT_COL: usize = 1;
+const STATUS_COL: usize = 3;
+const DATETIME_COL: usize = 4;
+
+/// Parses a CSS selector, reporting the config key when it is invalid.
+fn parse_selector(name: &str, value: &str) -> anyhow::Result<Selector> {
+    Selector::parse(value).map_err(|e| anyhow::anyhow!("Invalid `{name}` selector {value:?}: {e}"))
+}
+
 pub struct BybitParser {
     input: PathBuf,
     output: PathBuf,
@@ -45,41 +56,43 @@ impl Parser for BybitParser {
             .with_context(|| format!("Error opening file: {:?}", self.input.as_path()))?;
         let document = Html::parse_document(&html_content);
 
-        let row_selector = Selector::parse("tbody tr").unwrap();
-        let td_selector = Selector::parse("td").unwrap();
+        let row_selector = parse_selector("row", "tbody tr")?;
+        let td_selector = parse_selector("cell", "td")?;
 
-        let merchant_selector = Selector::parse(&cfg.bybit_selectors.merchant).unwrap();
-        let status_selector = Selector::parse(&cfg.bybit_selectors.status).unwrap();
-        let amount_selector = Selector::parse(&cfg.bybit_selectors.amount).unwrap();
-        let datetime_selector = Selector::parse(&cfg.bybit_selectors.datetime).unwrap();
+        let merchant_selector =
+            parse_selector("bybit_selectors.merchant", &cfg.bybit_selectors.merchant)?;
+        let status_selector = parse_selector("bybit_selectors.status", &cfg.bybit_selectors.status)?;
+        let amount_selector = parse_selector("bybit_selectors.amount", &cfg.bybit_selectors.amount)?;
+        let datetime_selector =
+            parse_selector("bybit_selectors.datetime", &cfg.bybit_selectors.datetime)?;
 
         for row in document.select(&row_selector) {
             let cells: Vec<_> = row.select(&td_selector).collect();
 
             if cells.len() >= 6 {
-                let description = cells[0]
+                let description = cells[DESCRIPTION_COL]
                     .select(&merchant_selector)
                     .next()
                     .map(|e| e.text().collect::<String>().trim().to_string())
                     .unwrap_or_default();
 
-                let status = cells[3]
+                let status = cells[STATUS_COL]
                     .select(&status_selector)
                     .next()
                     .map(|e| e.text().collect::<String>().trim().to_string())
-                    .unwrap_or_else(|| cells[3].text().collect::<String>().trim().to_string());
+                    .unwrap_or_else(|| cells[STATUS_COL].text().collect::<String>().trim().to_string());
 
                 if description.is_empty() || status != "Successful" {
                     continue;
                 }
 
-                let amount = cells[1]
+                let amount = cells[AMOUNT_COL]
                     .select(&amount_selector)
                     .next()
                     .map(|e| e.text().collect::<String>().trim().to_string())
                     .unwrap_or_default();
 
-                let date_time = cells[4]
+                let date_time = cells[DATETIME_COL]
                     .select(&datetime_selector)
                     .next()
                     .map(|e| e.text().collect::<String>().trim().to_string())
