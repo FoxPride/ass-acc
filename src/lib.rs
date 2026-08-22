@@ -126,6 +126,8 @@ pub struct AppConfig {
     pub rules: Vec<RenameRule>,
     pub access_token: String,
     pub client_secret: String,
+    #[serde(default = "default_firefly_port")]
+    pub firefly_port: u16,
     #[serde(default = "default_bybit_selectors")]
     pub bybit_selectors: BybitSelectors,
 }
@@ -163,6 +165,10 @@ fn default_bybit_selectors() -> BybitSelectors {
         amount: "p".to_string(),
         datetime: "span.text-nowrap".to_string(),
     }
+}
+
+fn default_firefly_port() -> u16 {
+    8081
 }
 
 #[derive(Serialize, Deserialize)]
@@ -309,6 +315,7 @@ mod tests {
         assert_eq!(cfg.ocr_models.recognition, "text-recognition.rten");
         assert_eq!(cfg.ttb_channels, vec!["Auto".to_string(), "Mobile".to_string()]);
         assert!(cfg.rules.is_empty());
+        assert_eq!(cfg.firefly_port, 8081);
         assert_eq!(
             cfg.bybit_selectors.merchant,
             ".bycard__trans-table-merch-name-col"

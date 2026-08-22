@@ -117,6 +117,7 @@ pub async fn upload(cfg: &mut AppConfig, address: &str) -> anyhow::Result<()> {
             &client,
             &cfg.access_token,
             &cfg.client_secret,
+            cfg.firefly_port,
             statement,
             address,
         )
@@ -162,6 +163,7 @@ async fn upload_statement(
     client: &reqwest::Client,
     access_token: &str,
     client_secret: &str,
+    port: u16,
     statement: PathBuf,
     address: &str,
 ) -> anyhow::Result<()> {
@@ -187,9 +189,7 @@ async fn upload_statement(
         .await?;
 
     let content = client
-        .post(format!(
-            "http://{address}:8081/autoupload?secret={client_secret}"
-        ))
+        .post(format!("http://{address}:{port}/autoupload?secret={client_secret}"))
         .headers(headers)
         .multipart(form)
         .send()
