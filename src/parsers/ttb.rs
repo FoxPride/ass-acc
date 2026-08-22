@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use chrono::NaiveDateTime;
 use regex::Regex;
 
 use crate::{AppConfig, Parser, Transaction};
@@ -121,14 +120,6 @@ impl Parser for TTBParser {
                     }
                 }
 
-                // Skip transactions that were already processed
-                if let Some(last_parsed) = cfg.last_parsed_datetime
-                    && let Ok(tx_date) = NaiveDateTime::parse_from_str(&date_time, TTB_DATE_FORMAT)
-                    && tx_date <= last_parsed
-                {
-                    continue;
-                }
-
                 let category = parts[4..channel_idx].join(" ");
                 let amount = parts[amount_idx].to_string();
                 let description = if amount_idx + 2 < parts.len() {
@@ -143,6 +134,12 @@ impl Parser for TTBParser {
                     amount,
                     description,
                 };
+
+                // Skip transactions that were already processed
+                if !transaction.is_after(cfg.last_parsed_datetime, TTB_DATE_FORMAT) {
+                    continue;
+                }
+
                 transaction.apply_rename_rules(&cfg.rules);
 
                 self.transactions.push(transaction);

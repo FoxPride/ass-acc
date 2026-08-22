@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use chrono::NaiveDateTime;
 use scraper::{Html, Selector};
 
 use crate::{AppConfig, Parser, Transaction};
@@ -88,21 +87,18 @@ impl Parser for BybitParser {
 
                 let category = "?".to_string();
 
-                // Skip transactions that were already processed
-                if let Some(last_parsed) = cfg.last_parsed_datetime
-                    && let Ok(tx_date) =
-                        NaiveDateTime::parse_from_str(&date_time, BYBIT_DATE_FORMAT)
-                    && tx_date <= last_parsed
-                {
-                    continue;
-                }
-
                 let mut transaction = Transaction {
                     date_time,
                     category,
                     amount,
                     description,
                 };
+
+                // Skip transactions that were already processed
+                if !transaction.is_after(cfg.last_parsed_datetime, BYBIT_DATE_FORMAT) {
+                    continue;
+                }
+
                 transaction.apply_rename_rules(&cfg.rules);
 
                 self.transactions.push(transaction);

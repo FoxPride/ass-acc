@@ -81,6 +81,16 @@ impl Transaction {
         ]
     }
 
+    /// Returns whether this transaction is newer than `last_parsed`, or `true`
+    /// when there is no cutoff. Transactions whose date cannot be parsed are
+    /// kept rather than silently dropped.
+    pub fn is_after(&self, last_parsed: Option<NaiveDateTime>, fmt: &str) -> bool {
+        let Some(last) = last_parsed else { return true };
+        NaiveDateTime::parse_from_str(&self.date_time, fmt)
+            .map(|d| d > last)
+            .unwrap_or(true)
+    }
+
     pub fn apply_rename_rules(&mut self, rules: &[RenameRule]) {
         for rule in rules {
             if !rule.regex.is_match(&self.description) {
@@ -248,6 +258,34 @@ mod tests {
         let rules = vec![rule("^True Money", "First"), rule("^True", "Second")];
         t.apply_rename_rules(&rules);
         assert_eq!(t.category, "First");
+    }
+
+    #[test]
+    fn is_after_keeps_transactions_without_cutoff() {
+        let t = tx();
+        assert!(t.is_after(None, "%d %B %Y %H:%M"));
+    }
+
+    #[test]
+    fn is_after_skips_older_transactions() {
+        let t = tx();
+        let last = NaiveDateTime::parse_from_str("07 July 2026 00:00", "%d %B %Y %H:%M").unwrap();
+        assert!(!t.is_after(Some(last), "%d %B %Y %H:%M"));
+    }
+
+    #[test]
+    fn is_after_keeps_newer_transactions() {
+        let t = tx();
+        let last = NaiveDateTime::parse_from_str("05 July 2026 00:00", "%d %B %Y %H:%M").unwrap();
+        assert!(t.is_after(Some(last), "%d %B %Y %H:%M"));
+    }
+
+    #[test]
+    fn is_after_keeps_unparseable_dates() {
+        let mut t = tx();
+        t.date_time = "garbage".to_string();
+        let last = NaiveDateTime::parse_from_str("01 July 2026 00:00", "%d %B %Y %H:%M").unwrap();
+        assert!(t.is_after(Some(last), "%d %B %Y %H:%M"));
     }
 
     #[test]

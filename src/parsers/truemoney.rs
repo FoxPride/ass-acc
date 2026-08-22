@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use chrono::NaiveDateTime;
 use image::{DynamicImage, GenericImageView};
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use regex::Regex;
@@ -123,13 +122,10 @@ impl Parser for TrueMoneyParser {
                             }
 
                             // Skip transactions that were already processed
-                            if let Some(last_parsed) = cfg.last_parsed_datetime
-                                && let Ok(tx_date) = NaiveDateTime::parse_from_str(
-                                    &transaction.date_time,
-                                    TRUEMONEY_DATE_FORMAT,
-                                )
-                                && tx_date <= last_parsed
-                            {
+                            if !transaction.is_after(
+                                cfg.last_parsed_datetime,
+                                TRUEMONEY_DATE_FORMAT,
+                            ) {
                                 continue;
                             }
 
