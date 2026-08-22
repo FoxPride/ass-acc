@@ -12,7 +12,8 @@ and preparing CSVs for upload to FireFly-III.
 - Applies transaction rename rules (`[[rules]]`) to category/description
 - Exports the result to a `;`-delimited CSV with the columns:
   `Category;Description;Date Time;Amount`
-- Uploads prepared CSVs to the FireFly-III Auto Upload endpoint
+- Uploads prepared CSVs to the FireFly-III Auto Upload endpoint, skipping files
+  that haven't been edited since they were parsed
 
 ## Requirements
 
@@ -70,13 +71,22 @@ cargo run -- clear
    - the `Images` folder -> TrueMoney OCR parser
 3. Applies `[[rules]]` to each transaction
 4. Writes the CSV to `output_folder`
-5. Updates `last_parsed_datetime` in the config
+5. Writes `parsed_manifest` to `output_folder`, recording the modification time
+   of each generated CSV
+6. Updates `last_parsed_datetime` in the config
 
 The `upload` command sends the CSVs from `output_folder` to:
 
-`http://<address>:8081/autoupload?secret=<client_secret>`
+`http://<address>:<firefly_port>/autoupload?secret=<client_secret>`
 
 with an `Authorization: Bearer <access_token>` header.
+
+### Editing before upload
+
+`upload` only sends CSVs that have been edited since the last `parse`: a CSV
+whose modification time still matches its `parsed_manifest` entry is treated as
+unmodified and skipped. If nothing is left to upload, it prints
+`Nothing to upload.` and exits successfully.
 
 ## Configuration (`Settings/config.toml`)
 
@@ -87,12 +97,13 @@ All fields actually used by the application are described below.
 - `input_folder` - folder with the input files for `parse`
 - `output_folder` - folder where the CSVs are written (`TTB.csv`, `Bybit.csv`, `TrueMoney.csv`)
 - `last_parsed_datetime` - "skip older transactions" filter. Strict format `%d-%m-%Y %H:%M`
-- `ocr_models` - an array of **two** paths to the RTEN models, in order:
-  1) detection
-  2) recognition
+- `ocr_models` - paths to the two RTEN models (a `[ocr_models]` table):
+  - `detection` - text detection model
+  - `recognition` - text recognition model
 - `ttb_channels` - list of channel markers for the TTB PDF
 - `access_token` - FireFly-III bearer token
 - `client_secret` - secret for the auto upload endpoint
+- `firefly_port` - port of the FireFly-III server (default `8081`)
 
 ### Rename rules `[[rules]]`
 
