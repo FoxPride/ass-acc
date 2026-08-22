@@ -61,8 +61,10 @@ impl Parser for BybitParser {
 
         let merchant_selector =
             parse_selector("bybit_selectors.merchant", &cfg.bybit_selectors.merchant)?;
-        let status_selector = parse_selector("bybit_selectors.status", &cfg.bybit_selectors.status)?;
-        let amount_selector = parse_selector("bybit_selectors.amount", &cfg.bybit_selectors.amount)?;
+        let status_selector =
+            parse_selector("bybit_selectors.status", &cfg.bybit_selectors.status)?;
+        let amount_selector =
+            parse_selector("bybit_selectors.amount", &cfg.bybit_selectors.amount)?;
         let datetime_selector =
             parse_selector("bybit_selectors.datetime", &cfg.bybit_selectors.datetime)?;
 
@@ -80,7 +82,13 @@ impl Parser for BybitParser {
                     .select(&status_selector)
                     .next()
                     .map(|e| e.text().collect::<String>().trim().to_string())
-                    .unwrap_or_else(|| cells[STATUS_COL].text().collect::<String>().trim().to_string());
+                    .unwrap_or_else(|| {
+                        cells[STATUS_COL]
+                            .text()
+                            .collect::<String>()
+                            .trim()
+                            .to_string()
+                    });
 
                 if description.is_empty() || status != "Successful" {
                     continue;

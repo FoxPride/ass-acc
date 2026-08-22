@@ -313,7 +313,10 @@ mod tests {
 
         assert_eq!(cfg.ocr_models.detection, "text-detection.rten");
         assert_eq!(cfg.ocr_models.recognition, "text-recognition.rten");
-        assert_eq!(cfg.ttb_channels, vec!["Auto".to_string(), "Mobile".to_string()]);
+        assert_eq!(
+            cfg.ttb_channels,
+            vec!["Auto".to_string(), "Mobile".to_string()]
+        );
         assert!(cfg.rules.is_empty());
         assert_eq!(cfg.firefly_port, 8081);
         assert_eq!(

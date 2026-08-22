@@ -123,10 +123,9 @@ impl Parser for TrueMoneyParser {
                             }
 
                             // Skip transactions that were already processed
-                            if !transaction.is_after(
-                                cfg.last_parsed_datetime,
-                                TRUEMONEY_DATE_FORMAT,
-                            ) {
+                            if !transaction
+                                .is_after(cfg.last_parsed_datetime, TRUEMONEY_DATE_FORMAT)
+                            {
                                 continue;
                             }
 

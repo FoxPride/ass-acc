@@ -119,7 +119,9 @@ fn extract_transaction(
     let parts: Vec<&str> = line.split_whitespace().collect();
 
     if parts.len() < DATE_TIME_TOKENS {
-        return Err(format!("Expected at least {DATE_TIME_TOKENS} tokens in \"{line}\""));
+        return Err(format!(
+            "Expected at least {DATE_TIME_TOKENS} tokens in \"{line}\""
+        ));
     }
 
     let date_time = parts[0..DATE_TIME_TOKENS].join(" ");
@@ -165,7 +167,7 @@ mod tests {
 
     use crate::AppConfig;
 
-    use super::{extract_transaction, AMOUNT_TOKEN_RE};
+    use super::{AMOUNT_TOKEN_RE, extract_transaction};
 
     fn cfg() -> AppConfig {
         AppConfig {

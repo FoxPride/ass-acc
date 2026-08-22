@@ -105,10 +105,7 @@ fn bybit_parser_matches_expected_output() {
 #[test]
 fn ttb_parser_matches_expected_output() {
     let mut cfg = load_config();
-    let input = manifest_dir()
-        .join("example")
-        .join("parse")
-        .join("TTB.pdf");
+    let input = manifest_dir().join("example").join("parse").join("TTB.pdf");
 
     let mut parser = TTBParser::new(input, &cfg.output_folder);
     parser.parse(&mut cfg).unwrap();
