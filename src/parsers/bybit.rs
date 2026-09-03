@@ -129,3 +129,149 @@ impl Parser for BybitParser {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use chrono::NaiveDateTime;
+    use regex::Regex;
+
+    use crate::{AppConfig, BybitSelectors, Parser, RenameRule, Transaction};
+
+    use super::BybitParser;
+
+    /// Gives each concurrent test its own temp file (they share one process).
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    /// Writes `body` into a temporary HTML file and runs the parser over it.
+    fn parse_html(cfg: &AppConfig, rows: &str) -> Vec<Transaction> {
+        let unique = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "ass_acc_bybit_{}_{}.html",
+            std::process::id(),
+            unique
+        ));
+        let html = format!("<html><body><table><tbody>{rows}</tbody></table></body></html>");
+        std::fs::write(&path, html).unwrap();
+
+        let mut parser = BybitParser::new(path.clone(), ".");
+        parser.parse(cfg).unwrap();
+
+        std::fs::remove_file(&path).ok();
+        parser.transactions().to_vec()
+    }
+
+    /// One data row in the Bybit transaction table shape: six `<td>` cells,
+    /// with the merchant/amount/status/datetime inside nested elements that the
+    /// configured CSS selectors target.
+    fn row(merchant: &str, amount: &str, status: &str, datetime: &str) -> String {
+        format!(
+            "<tr>\
+                <td><div class=\"bycard__trans-table-merch-name-col\">{merchant}</div></td>\
+                <td><p>{amount}</p></td>\
+                <td>Type</td>\
+                <td><span>{status}</span></td>\
+                <td><span class=\"text-nowrap\">{datetime}</span></td>\
+                <td>Action</td>\
+            </tr>"
+        )
+    }
+
+    /// Config with the same selectors the real `Settings/config.toml` uses.
+    /// (`AppConfig::default()` leaves them empty: struct-default is not the
+    /// same as the serde `default_*` config defaults.)
+    fn cfg() -> AppConfig {
+        AppConfig {
+            bybit_selectors: BybitSelectors {
+                merchant: ".bycard__trans-table-merch-name-col".to_string(),
+                status: "span".to_string(),
+                amount: "p".to_string(),
+                datetime: "span.text-nowrap".to_string(),
+            },
+            ..AppConfig::default()
+        }
+    }
+
+    #[test]
+    fn extracts_fields_of_successful_rows() {
+        let txs = parse_html(
+            &cfg(),
+            &format!(
+                "{}{}",
+                row(
+                    "Telegram",
+                    "-17.53 USD",
+                    "Successful",
+                    "2026-07-29 12:54:24"
+                ),
+                row("Foo", "-5.00 USD", "Failed", "2026-07-28 10:00:00")
+            ),
+        );
+
+        assert_eq!(txs.len(), 1, "failed-status rows must be skipped");
+        assert_eq!(txs[0].description, "Telegram");
+        assert_eq!(txs[0].amount, "-17.53 USD");
+        assert_eq!(txs[0].date_time, "2026-07-29 12:54:24");
+        assert_eq!(txs[0].category, "?");
+    }
+
+    #[test]
+    fn skips_rows_without_merchant() {
+        let txs = parse_html(
+            &cfg(),
+            &format!(
+                "{}{}",
+                row("", "-1.00 USD", "Successful", "2026-07-29 12:54:24"),
+                row("Shop", "-2.00 USD", "Successful", "2026-07-28 12:54:24")
+            ),
+        );
+
+        assert_eq!(txs.len(), 1, "rows with an empty merchant must be skipped");
+        assert_eq!(txs[0].description, "Shop");
+    }
+
+    #[test]
+    fn applies_rename_rules_to_description() {
+        let mut cfg = cfg();
+        cfg.rules = vec![RenameRule {
+            regex: Regex::new("^Telegram").unwrap(),
+            category: "Messaging".to_string(),
+            description: None,
+            amount: None,
+        }];
+
+        let txs = parse_html(
+            &cfg,
+            &row(
+                "Telegram",
+                "-17.53 USD",
+                "Successful",
+                "2026-07-29 12:54:24",
+            ),
+        );
+
+        assert_eq!(txs.len(), 1);
+        assert_eq!(txs[0].category, "Messaging");
+    }
+
+    #[test]
+    fn skips_transactions_older_than_last_parsed() {
+        let mut cfg = cfg();
+        cfg.last_parsed_datetime = Some(
+            NaiveDateTime::parse_from_str("2026-07-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+        );
+
+        let txs = parse_html(
+            &cfg,
+            &format!(
+                "{}{}",
+                row("Old", "-1.00 USD", "Successful", "2026-06-17 16:36:37"),
+                row("New", "-2.00 USD", "Successful", "2026-07-29 12:54:24")
+            ),
+        );
+
+        assert_eq!(txs.len(), 1, "old rows must be skipped by the cutoff");
+        assert_eq!(txs[0].description, "New");
+    }
+}
