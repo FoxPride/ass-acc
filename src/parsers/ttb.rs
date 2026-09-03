@@ -64,6 +64,7 @@ impl Parser for TTBParser {
 
         let mut buffer = String::new();
         let mut in_transaction = false;
+        let mut skipped_lines = 0usize;
 
         for line in parsed.lines() {
             let is_new_transaction = date_rg.is_match_at(line, 0);
@@ -99,8 +100,15 @@ impl Parser for TTBParser {
                     transaction.apply_rename_rules(&cfg.rules);
                     self.transactions.push(transaction);
                 }
-                Err(err) => eprintln!("  Skipping line: {err}"),
+                Err(err) => {
+                    skipped_lines += 1;
+                    eprintln!("  Skipping line: {err}");
+                }
             }
+        }
+
+        if skipped_lines > 0 {
+            eprintln!("  Skipped {skipped_lines} unparseable line(s).");
         }
 
         Ok(())
