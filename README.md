@@ -126,6 +126,24 @@ text-detection bounding boxes to locate each transaction cell (date, description
 time, amount) and recognizes them individually, so no manual region tuning is
 required.
 
+## Tests
+
+`example/` contains *synthetic* fixtures only (no real statements), and the
+integration tests in `tests/parsers.rs` build their own config instead of
+reading `Settings/config.toml`, so the suite runs from a clean clone:
+
+```bash
+cargo test
+```
+
+The TrueMoney OCR test is compiled only in release builds (OCR is very slow
+under a debug build) and needs the two RTEN models, which default to the repo
+root (`text-detection.rten`, `text-recognition.rten`):
+
+```bash
+OCR_MODELS_DIR=/path/to/models cargo test --release
+```
+
 ## `clear` command behavior
 
 - In `input_folder`, removes all files
