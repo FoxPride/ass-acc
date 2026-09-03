@@ -52,7 +52,7 @@ impl Parser for TTBParser {
         &self.transactions
     }
 
-    fn parse(&mut self, cfg: &mut AppConfig) -> anyhow::Result<()> {
+    fn parse(&mut self, cfg: &AppConfig) -> anyhow::Result<()> {
         let bytes = std::fs::read(self.input.as_path())
             .with_context(|| format!("Error opening file: {:?}", self.input.as_path()))?;
 

@@ -45,7 +45,7 @@ pub struct TrueMoneyParser {
 }
 
 impl TrueMoneyParser {
-    pub fn new(input: std::path::PathBuf, output_folder: &str) -> Self {
+    pub fn new(input: PathBuf, output_folder: &str) -> Self {
         let mut output = PathBuf::from(output_folder);
         output.push("TrueMoney.csv");
 
@@ -70,7 +70,7 @@ impl Parser for TrueMoneyParser {
         &self.transactions
     }
 
-    fn parse(&mut self, cfg: &mut AppConfig) -> anyhow::Result<()> {
+    fn parse(&mut self, cfg: &AppConfig) -> anyhow::Result<()> {
         let engine = build_engine(cfg)?;
 
         let date_rg = Regex::new(r"(\d{1,2})\s+(\w+)\s+(\d{4})").unwrap();

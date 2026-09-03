@@ -26,7 +26,7 @@ pub struct BybitParser {
 }
 
 impl BybitParser {
-    pub fn new(input: std::path::PathBuf, output_folder: &str) -> Self {
+    pub fn new(input: PathBuf, output_folder: &str) -> Self {
         let mut output = PathBuf::from(output_folder);
         output.push("Bybit.csv");
 
@@ -43,7 +43,7 @@ impl Parser for BybitParser {
         "Bybit"
     }
 
-    fn get_output(&self) -> &std::path::PathBuf {
+    fn get_output(&self) -> &PathBuf {
         &self.output
     }
 
@@ -51,7 +51,7 @@ impl Parser for BybitParser {
         &self.transactions
     }
 
-    fn parse(&mut self, cfg: &mut AppConfig) -> anyhow::Result<()> {
+    fn parse(&mut self, cfg: &AppConfig) -> anyhow::Result<()> {
         let html_content = std::fs::read_to_string(self.input.as_path())
             .with_context(|| format!("Error opening file: {:?}", self.input.as_path()))?;
         let document = Html::parse_document(&html_content);

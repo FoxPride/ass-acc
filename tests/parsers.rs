@@ -89,14 +89,14 @@ fn assert_transactions_eq(actual: &[Transaction], expected: &[Transaction]) {
 
 #[test]
 fn bybit_parser_matches_expected_output() {
-    let mut cfg = load_config();
+    let cfg = load_config();
     let input = manifest_dir()
         .join("example")
         .join("parse")
         .join("Bybit.html");
 
     let mut parser = BybitParser::new(input, &cfg.output_folder);
-    parser.parse(&mut cfg).unwrap();
+    parser.parse(&cfg).unwrap();
 
     let expected = expected_transactions("Bybit.csv");
     assert_transactions_eq(parser.transactions(), &expected);
@@ -104,11 +104,11 @@ fn bybit_parser_matches_expected_output() {
 
 #[test]
 fn ttb_parser_matches_expected_output() {
-    let mut cfg = load_config();
+    let cfg = load_config();
     let input = manifest_dir().join("example").join("parse").join("TTB.pdf");
 
     let mut parser = TTBParser::new(input, &cfg.output_folder);
-    parser.parse(&mut cfg).unwrap();
+    parser.parse(&cfg).unwrap();
 
     let expected = expected_transactions("TTB.csv");
     assert_transactions_eq(parser.transactions(), &expected);
@@ -122,7 +122,7 @@ fn ttb_parser_matches_expected_output() {
 #[test]
 #[ignore = "requires OCR models and is slow; run with `cargo test -- --ignored truemoney`"]
 fn truemoney_parser_matches_expected_output() {
-    let mut cfg = load_config();
+    let cfg = load_config();
 
     // The model paths in config.toml are machine-specific. Bail out gracefully
     // when they are absent instead of failing.
@@ -136,7 +136,7 @@ fn truemoney_parser_matches_expected_output() {
     let input = manifest_dir().join("example").join("parse").join("Images");
 
     let mut parser = TrueMoneyParser::new(input, &cfg.output_folder);
-    parser.parse(&mut cfg).unwrap();
+    parser.parse(&cfg).unwrap();
 
     let expected = expected_transactions("TrueMoney.csv");
     assert_transactions_eq(parser.transactions(), &expected);

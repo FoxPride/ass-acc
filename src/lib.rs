@@ -45,7 +45,7 @@ pub trait Parser {
 
     fn transactions(&self) -> &[Transaction];
 
-    fn parse(&mut self, cfg: &mut AppConfig) -> Result<()>;
+    fn parse(&mut self, cfg: &AppConfig) -> Result<()>;
 
     fn write_csv(&self) -> Result<()> {
         let mut csv_writer = WriterBuilder::new()
