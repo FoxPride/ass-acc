@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # OCR models for the TrueMoney test, from the ocrs project (see
+  # https://github.com/robertknight/ocrs/blob/main/ocrs/examples/download-models.sh).
+  DETECTION_MODEL: https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
+  RECOGNITION_MODEL: https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Debug build: all tests except the TrueMoney OCR test, which is compiled
+      # only in release builds and therefore covered by the `ocr` job below.
+      - name: Test
+        run: cargo test --all-targets
+
+  # The TrueMoney parser runs OCR, which needs the two RTEN models and is very
+  # slow under a debug build, so it is exercised only in release here. Models
+  # are downloaded from the public ocrs bucket (never committed) and pointed to
+  # via OCR_MODELS_DIR; the test bails out gracefully if they are unavailable.
+  ocr:
+    name: OCR integration test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Download OCR models
+        run: |
+          mkdir -p models
+          curl -fsSL -o models/text-detection.rten "$DETECTION_MODEL"
+          curl -fsSL -o models/text-recognition.rten "$RECOGNITION_MODEL"
+          ls -l models
+
+      - name: Run TrueMoney OCR test
+        run: OCR_MODELS_DIR=$PWD/models cargo test --release --test parsers truemoney_parser_matches_expected_output
+
+  # Builds release binaries for each platform. Runs only on version tags and
+  # only after the test jobs have passed.
+  build:
+    name: Build (${{ matrix.target }})
+    needs: [test, ocr]
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset: ass-acc-linux-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset: ass-acc-macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: ass-acc-windows-x86_64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build (release)
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Stage asset
+        shell: bash
+        run: |
+          exe=""
+          if [[ "${{ matrix.target }}" == *windows* ]]; then exe=".exe"; fi
+          cp "target/${{ matrix.target }}/release/ass-acc${exe}" "${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ matrix.asset }}
+
+  # Creates (or updates) the GitHub Release for the tag and attaches the
+  # platform binaries built above.
+  release:
+    name: Create release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -la dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
