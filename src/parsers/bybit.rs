@@ -137,7 +137,7 @@ mod tests {
     use chrono::NaiveDateTime;
     use regex::Regex;
 
-    use crate::{AppConfig, BybitSelectors, Parser, RenameRule, Transaction};
+    use crate::{AppConfig, Parser, RenameRule, Transaction};
 
     use super::BybitParser;
 
@@ -178,19 +178,9 @@ mod tests {
         )
     }
 
-    /// Config with the same selectors the real `Settings/config.toml` uses.
-    /// (`AppConfig::default()` leaves them empty: struct-default is not the
-    /// same as the serde `default_*` config defaults.)
     fn cfg() -> AppConfig {
-        AppConfig {
-            bybit_selectors: BybitSelectors {
-                merchant: ".bycard__trans-table-merch-name-col".to_string(),
-                status: "span".to_string(),
-                amount: "p".to_string(),
-                datetime: "span.text-nowrap".to_string(),
-            },
-            ..AppConfig::default()
-        }
+        // Mirrors the serde config defaults, including the Bybit selectors.
+        AppConfig::default()
     }
 
     #[test]

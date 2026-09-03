@@ -112,7 +112,7 @@ impl Transaction {
     }
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AppConfig {
     pub input_folder: String,
     pub output_folder: String,
@@ -130,6 +130,23 @@ pub struct AppConfig {
     pub firefly_port: u16,
     #[serde(default = "default_bybit_selectors")]
     pub bybit_selectors: BybitSelectors,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            input_folder: String::new(),
+            output_folder: String::new(),
+            last_parsed_datetime: None,
+            ocr_models: default_ocr_models(),
+            ttb_channels: default_ttb_channels(),
+            rules: Vec::new(),
+            access_token: String::new(),
+            client_secret: String::new(),
+            firefly_port: default_firefly_port(),
+            bybit_selectors: default_bybit_selectors(),
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
