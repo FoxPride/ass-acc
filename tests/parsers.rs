@@ -3,24 +3,51 @@
 //!
 //! These tests exercise the full pipeline (extraction + rename rules) and act as
 //! a safety net before/while refactoring the parsers.
+//!
+//! The tests are self-contained: they build their own [`AppConfig`] instead of
+//! reading `Settings/config.toml`, so they run identically from a clean clone.
+//! The synthetic fixtures in `example/` contain no personal data.
 
 use std::path::{Path, PathBuf};
 
-use ass_acc::parsers::{bybit::BybitParser, truemoney::TrueMoneyParser, ttb::TTBParser};
-use ass_acc::{AppConfig, Parser, Transaction};
+#[cfg(not(debug_assertions))]
+use ass_acc::parsers::truemoney::TrueMoneyParser;
+use ass_acc::parsers::{bybit::BybitParser, ttb::TTBParser};
+use ass_acc::{AppConfig, OcrModels, Parser, Transaction};
 
 /// Absolute path to the crate root, independent of the CWD tests run from.
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// Loads the real application config and disables the "skip old transactions"
-/// filter so the expected fixtures are fully reproduced.
-fn load_config() -> AppConfig {
-    let config_path = manifest_dir().join("Settings").join("config.toml");
-    let mut cfg: AppConfig = confy::load_path(config_path).expect("failed to load config");
-    cfg.last_parsed_datetime = None;
-    cfg
+/// Builds the config the fixtures were generated against.
+///
+/// No rename rules are used, so the expected CSVs are stable and contain no
+/// personal categories. `ttb_channels` lists every channel that appears in the
+/// synthetic TTB statement.
+fn test_config() -> AppConfig {
+    AppConfig {
+        ttb_channels: vec!["Auto", "Mobile", "EDC"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+        ocr_models: OcrModels {
+            detection: ocr_model_path("text-detection.rten"),
+            recognition: ocr_model_path("text-recognition.rten"),
+        },
+        ..AppConfig::default()
+    }
+}
+
+/// Location of an OCR model file.
+///
+/// Defaults to the crate root so a checked-out model file (or symlink) is
+/// picked up automatically; set `OCR_MODELS_DIR` to point elsewhere without
+/// hard-coding a machine-specific path in the repository.
+fn ocr_model_path(name: &str) -> String {
+    let dir = std::env::var("OCR_MODELS_DIR")
+        .unwrap_or_else(|_| manifest_dir().to_string_lossy().into_owned());
+    Path::new(&dir).join(name).to_string_lossy().into_owned()
 }
 
 /// Reads the expected transactions from one of the `example/output/*.csv`
@@ -57,14 +84,12 @@ fn read_expected_transactions(path: &Path) -> Vec<Transaction> {
         .collect()
 }
 
-/// Asserts that `actual` transactions match `expected`, in order.
+#[track_caller]
 fn assert_transactions_eq(actual: &[Transaction], expected: &[Transaction]) {
     assert_eq!(
         actual.len(),
         expected.len(),
-        "transaction count mismatch:\nactual:\n{:#?}\nexpected:\n{:#?}",
-        actual,
-        expected
+        "transaction count mismatch (actual vs expected)\nactual: {actual:#?}\nexpected: {expected:#?}"
     );
 
     for (i, (actual_tx, expected_tx)) in actual.iter().zip(expected).enumerate() {
@@ -89,7 +114,7 @@ fn assert_transactions_eq(actual: &[Transaction], expected: &[Transaction]) {
 
 #[test]
 fn bybit_parser_matches_expected_output() {
-    let cfg = load_config();
+    let cfg = test_config();
     let input = manifest_dir()
         .join("example")
         .join("parse")
@@ -104,7 +129,7 @@ fn bybit_parser_matches_expected_output() {
 
 #[test]
 fn ttb_parser_matches_expected_output() {
-    let cfg = load_config();
+    let cfg = test_config();
     let input = manifest_dir().join("example").join("parse").join("TTB.pdf");
 
     let mut parser = TTBParser::new(input, &cfg.output_folder);
@@ -114,22 +139,28 @@ fn ttb_parser_matches_expected_output() {
     assert_transactions_eq(parser.transactions(), &expected);
 }
 
-// The TrueMoney parser runs OCR over a screenshot, which requires the two RTEN
-// models referenced by `ocr_models` in the config and takes a while. It is
-// skipped by default; run it explicitly with:
+// The TrueMoney parser runs OCR over a screenshot, which needs the two RTEN
+// models and is slow under a debug build. The test is therefore compiled only
+// in release builds. Run it with:
 //
-//     cargo test -- --ignored truemoney
+//     OCR_MODELS_DIR=/path/to/models cargo test --release truemoney
+//
+// The models default to <repo-root>/text-detection.rten and
+// <repo-root>/text-recognition.rten when `OCR_MODELS_DIR` is unset.
+#[cfg(not(debug_assertions))]
 #[test]
-#[ignore = "requires OCR models and is slow; run with `cargo test -- --ignored truemoney`"]
 fn truemoney_parser_matches_expected_output() {
-    let cfg = load_config();
+    let cfg = test_config();
 
-    // The model paths in config.toml are machine-specific. Bail out gracefully
-    // when they are absent instead of failing.
+    // Model files are machine-specific and never committed; bail out gracefully
+    // when they are absent instead of failing the suite.
     let detection = &cfg.ocr_models.detection;
     let recognition = &cfg.ocr_models.recognition;
     if !Path::new(detection).exists() || !Path::new(recognition).exists() {
-        eprintln!("skipping: OCR models not found at {detection:?} / {recognition:?}");
+        eprintln!(
+            "skipping: OCR models not found at {detection:?} / {recognition:?}\n\
+             set OCR_MODELS_DIR to the folder containing the .rten models"
+        );
         return;
     }
 

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Bybit Demo - Synthetic Withdrawal History</title>
+</head>
+<body>
+<!--
+    Synthetic fixture for the Bybit parser. Mirrors the structure of a real
+    Bybit statement export (rows of `.bycard__trans-table`, merchant name in
+    `.bycard__trans-table-merch-name-col`) but contains only invented data.
+-->
+<div class="bycard">
+    <div class="bycard__header">
+        <h1>Withdrawal History</h1>
+        <p>Account: Bybit Demo (synthetic)</p>
+    </div>
+    <table class="bycard__trans-table">
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Amount</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Time</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><div class="bycard__trans-table-merch-name-col">NETFLIX.COM</div></td>
+                <td><p>-15.99</p></td>
+                <td>Withdraw</td>
+                <td><span>Successful</span></td>
+                <td><span class="text-nowrap">2026-07-15 20:14:00</span></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><div class="bycard__trans-table-merch-name-col">BINANCE SPOT</div></td>
+                <td><p>+100.00</p></td>
+                <td>Deposit</td>
+                <td><span>Successful</span></td>
+                <td><span class="text-nowrap">2026-07-15 18:02:00</span></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><div class="bycard__trans-table-merch-name-col">KRAKEN EXCHANGE</div></td>
+                <td><p>-42.50</p></td>
+                <td>Withdraw</td>
+                <td><span>Failed</span></td>
+                <td><span class="text-nowrap">2026-07-15 09:30:00</span></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><div class="bycard__trans-table-merch-name-col">APPLE.COM/BILL</div></td>
+                <td><p>-2.99</p></td>
+                <td>Withdraw</td>
+                <td><span>Successful</span></td>
+                <td><span class="text-nowrap">2026-07-14 09:00:00</span></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><div class="bycard__trans-table-merch-name-col">AMAZON MARKETPLACE</div></td>
+                <td><p>-99.00</p></td>
+                <td>Withdraw</td>
+                <td><span>Processing</span></td>
+                <td><span class="text-nowrap">2026-07-13 22:41:00</span></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+</body>
+</html>
